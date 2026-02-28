@@ -1,0 +1,284 @@
+<section class="hero hero-split">
+  <div class="hero-left">
+    <div class="hero-eyebrow">Smart parking for real cities</div>
+    <h1>Find or Share Parking in Minutes</h1>
+    <p class="hero-subtitle">
+      SmartPark connects drivers who need short-term parking with locals who have empty spaces—search, book, and navigate in a few taps.
+    </p>
+
+    <div class="hero-booking-card">
+      <form class="hero-form" action="<%= currentUser && currentUser.role === 'user' ? '/user/search' : '/login' %>" method="GET">
+        <div class="hero-form-row">
+          <label class="small-label" for="location">Enter your location</label>
+          <div class="input-with-icon">
+            <span class="input-icon">📍</span>
+            <input
+              id="location"
+              name="location"
+              type="text"
+              placeholder="Search by area, landmark, or address"
+            />
+          </div>
+          <div class="hero-suggestions">
+            <span>Downtown</span>
+            <span>Airport</span>
+            <span>Business Park</span>
+          </div>
+        </div>
+
+        <div class="hero-form-row hero-inline-row">
+          <div class="hero-inline-field">
+            <label class="small-label" for="date">Date</label>
+            <input id="date" type="date" />
+          </div>
+          <div class="hero-inline-field">
+            <label class="small-label" for="from">From</label>
+            <input id="from" type="time" />
+          </div>
+          <div class="hero-inline-field">
+            <label class="small-label" for="to">To</label>
+            <input id="to" type="time" />
+          </div>
+        </div>
+
+        <div class="hero-form-row">
+          <span class="small-label">Vehicle type</span>
+          <div class="vehicle-toggle">
+            <button type="button" class="vehicle-pill selected">Car</button>
+            <button type="button" class="vehicle-pill">Bike</button>
+            <button type="button" class="vehicle-pill">SUV</button>
+            <button type="button" class="vehicle-pill">EV</button>
+          </div>
+        </div>
+
+        <div class="hero-cta-row">
+          <button type="submit" class="btn primary hero-cta-main">
+            Find Parking
+          </button>
+          <a href="/register" class="btn ghost hero-cta-secondary">
+            List Your Space
+          </a>
+        </div>
+        <p class="hero-reassure">No subscription. Pay only when you park.</p>
+      </form>
+    </div>
+  </div>
+
+  <div class="hero-right">
+    <div class="hero-map-frame">
+      <div class="hero-map-header">
+        <div class="hero-map-toggle">
+          <button class="map-toggle-btn active">Now</button>
+          <button class="map-toggle-btn">Later</button>
+        </div>
+        <span class="hero-map-status">Real-time availability</span>
+      </div>
+      <div class="hero-map-body">
+        <div class="map-pin pin-1">
+          <span class="pin-price">₹80/hr</span>
+        </div>
+        <div class="map-pin pin-2">
+          <span class="pin-price">₹120/hr</span>
+        </div>
+        <div class="map-pin pin-3">
+          <span class="pin-price">₹60/hr</span>
+        </div>
+        <div class="hero-map-grid"></div>
+      </div>
+      <div class="hero-map-card">
+        <div class="map-card-header">
+          <h3>City Center Parking – Block C</h3>
+          <span class="map-badge">Instant booking</span>
+        </div>
+        <p class="map-meta">
+          <span>350 m away</span>
+          <span>•</span>
+          <span><span class="status-dot"></span>5 slots available</span>
+        </p>
+        <p class="map-vehicle">
+          Car • Bike • EV
+        </p>
+        <div class="map-footer">
+          <div class="map-price">
+            <span class="map-price-label">Starting at</span>
+            <span class="map-price-value">₹80 / hour</span>
+          </div>
+          <button class="btn small ghost map-cta" type="button">
+            View details
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="how-it-works" class="section how-it-works">
+  <header class="section-header centered">
+    <p class="section-eyebrow">How it works</p>
+    <h2>Three simple steps for everyone</h2>
+    <p class="section-subtitle">
+      Whether you&apos;re finding a spot or earning from yours, it&apos;s just three steps.
+    </p>
+  </header>
+
+  <div class="how-rows">
+    <div class="how-row" id="for-users">
+      <div class="how-row-header">
+        <h3>For Users</h3>
+        <span class="how-caption">Drivers who need smart, short-term parking.</span>
+      </div>
+      <div class="how-grid">
+        <article class="how-card">
+          <span class="how-step">01</span>
+          <h4>Search</h4>
+          <p>Enter your destination and timing to see live spots nearby with clear, upfront pricing.</p>
+        </article>
+        <article class="how-card">
+          <span class="how-step">02</span>
+          <h4>Book</h4>
+          <p>Pick the slot that fits your schedule and vehicle. Confirm instantly with secure online payment.</p>
+        </article>
+        <article class="how-card">
+          <span class="how-step">03</span>
+          <h4>Navigate</h4>
+          <p>Get a Google Maps link straight to your spot. Just follow the directions and park with confidence.</p>
+        </article>
+      </div>
+    </div>
+
+    <div class="how-row" id="for-owners">
+      <div class="how-row-header">
+        <h3>For Owners</h3>
+        <span class="how-caption">Space owners who want to earn from empty slots.</span>
+      </div>
+      <div class="how-grid">
+        <article class="how-card">
+          <span class="how-step">01</span>
+          <h4>List Space</h4>
+          <p>Add your address, photos, vehicle types allowed, timings, and pricing with a guided flow.</p>
+        </article>
+        <article class="how-card">
+          <span class="how-step">02</span>
+          <h4>Get Bookings</h4>
+          <p>Receive instant booking notifications and manage availability from a simple dashboard.</p>
+        </article>
+        <article class="how-card">
+          <span class="how-step">03</span>
+          <h4>Earn Money</h4>
+          <p>Track your earnings, view history, and receive payouts directly to your bank.</p>
+        </article>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section trust">
+  <header class="section-header centered">
+    <p class="section-eyebrow">Trust &amp; Safety</p>
+    <h2>Built for reliability, security, and peace of mind</h2>
+    <p class="section-subtitle">
+      SmartPark is designed with the same level of trust and reliability you expect from leading mobility platforms.
+    </p>
+  </header>
+
+  <div class="trust-grid">
+    <article class="trust-card">
+      <h4>Secure Payments</h4>
+      <p>PCI-compliant partners and encrypted transactions for every booking.</p>
+    </article>
+    <article class="trust-card">
+      <h4>Verified Users</h4>
+      <p>Phone and email verification keep both drivers and owners accountable.</p>
+    </article>
+    <article class="trust-card">
+      <h4>Real-Time Availability</h4>
+      <p>Live slot status with instant updates as bookings are made.</p>
+    </article>
+    <article class="trust-card">
+      <h4>Instant Booking Confirmation</h4>
+      <p>Lock in your spot in seconds with clear arrival instructions.</p>
+    </article>
+    <article class="trust-card">
+      <h4>Google Maps Navigation</h4>
+      <p>One-tap directions from your current location to your reserved parking.</p>
+    </article>
+    <article class="trust-card">
+      <h4>24×7 Support</h4>
+      <p>Dedicated support team ready to help with on-ground issues.</p>
+    </article>
+  </div>
+</section>
+
+<section id="pricing" class="section earnings">
+  <div class="earnings-inner">
+    <div class="earnings-copy">
+      <p class="section-eyebrow">For Owners</p>
+      <h2>Turn Your Empty Space Into Income</h2>
+      <p class="section-subtitle">
+        Drive predictable monthly income from your unused driveways, shopfronts, and office parking—on your terms.
+      </p>
+      <ul class="earnings-list">
+        <li><strong>Flexible timings</strong> – Choose exactly when your space is available.</li>
+        <li><strong>Transparent payouts</strong> – Track every booking and payout in one dashboard.</li>
+        <li><strong>You stay in control</strong> – Approve vehicle types, pricing, and space rules.</li>
+      </ul>
+      <a href="/register" class="btn primary earnings-cta">Start Earning Today</a>
+    </div>
+
+    <div class="earnings-card">
+      <div class="earnings-card-header">
+        <h3>Earnings Estimator</h3>
+        <p>See how much you could earn each month.</p>
+      </div>
+      <div class="earnings-field">
+        <div class="earnings-label-row">
+          <span>Slots available</span>
+          <span class="earnings-value">4</span>
+        </div>
+        <div class="earnings-slider">
+          <div class="earnings-slider-fill"></div>
+        </div>
+      </div>
+      <div class="earnings-field">
+        <div class="earnings-label-row">
+          <span>Avg. hours booked / day</span>
+          <span class="earnings-value">5 hrs</span>
+        </div>
+        <div class="earnings-slider">
+          <div class="earnings-slider-fill"></div>
+        </div>
+      </div>
+      <div class="earnings-field">
+        <div class="earnings-label-row">
+          <span>Price per hour</span>
+          <span class="earnings-value">₹80</span>
+        </div>
+        <div class="earnings-slider">
+          <div class="earnings-slider-fill"></div>
+        </div>
+      </div>
+      <div class="earnings-result">
+        <span class="earnings-result-label">Estimated Monthly Earnings</span>
+        <span class="earnings-result-value">₹18,400 / month</span>
+        <span class="earnings-result-caption">Based on 60% occupancy. Actual earnings may vary.</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section conversion-strip">
+  <div class="conversion-inner">
+    <div class="conversion-text">
+      <h3>Ready to park smarter or earn from your space?</h3>
+      <p>Join urban drivers and space owners already using SmartPark.</p>
+    </div>
+    <div class="conversion-actions">
+      <a href="<%= currentUser && currentUser.role === 'user' ? '/user/dashboard' : '/login' %>" class="btn primary">
+        Find Parking Now
+      </a>
+      <a href="/register" class="btn ghost">
+        List My Space
+      </a>
+    </div>
+  </div>
+</section>

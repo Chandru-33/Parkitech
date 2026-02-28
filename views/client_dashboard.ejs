@@ -1,0 +1,148 @@
+<section class="page-section owner-dashboard">
+  <header class="section-header">
+    <div>
+      <p class="section-eyebrow">Owner Dashboard</p>
+      <h1>Welcome back, <%= currentUser.name %></h1>
+    </div>
+    <div class="owner-header-actions">
+      <a href="/client/bookings/export" class="btn ghost btn-compact">Export CSV</a>
+      <a href="/client/parking/new" class="btn primary btn-compact">Add New Space</a>
+    </div>
+  </header>
+
+  <div class="stats-grid">
+    <article class="stat-card">
+      <p class="stat-label">Total Earnings</p>
+      <p class="stat-value">₹<%= stats.total_earnings ? stats.total_earnings.toFixed(2) : '0.00' %></p>
+      <p class="stat-note">After platform fee (<%= (commissionRate * 100).toFixed(0) %>%)</p>
+    </article>
+    <article class="stat-card">
+      <p class="stat-label">Total Bookings</p>
+      <p class="stat-value"><%= stats.total_bookings || 0 %></p>
+      <p class="stat-note">All time</p>
+    </article>
+    <article class="stat-card">
+      <p class="stat-label">Pending Payout</p>
+      <p class="stat-value">₹<%= stats.pending_payout ? stats.pending_payout.toFixed(2) : '0.00' %></p>
+      <p class="stat-note">Active bookings</p>
+    </article>
+    <article class="stat-card">
+      <p class="stat-label">Today&apos;s Earnings</p>
+      <p class="stat-value">₹<%= stats.today_earnings ? stats.today_earnings.toFixed(2) : '0.00' %></p>
+      <p class="stat-note">Revenue today</p>
+    </article>
+  </div>
+
+  <% if (monthlyData && monthlyData.length > 0) { %>
+  <section class="chart-section">
+    <h2>Monthly Earnings</h2>
+    <div class="chart-wrapper">
+      <canvas
+        id="earnings-chart"
+        width="700"
+        height="260"
+        data-labels='<%= JSON.stringify(monthlyData.map(m => m.month)) %>'
+        data-values='<%= JSON.stringify(monthlyData.map(m => m.earnings)) %>'
+      ></canvas>
+    </div>
+  </section>
+  <% } %>
+
+  <section class="owner-section">
+    <header class="owner-section-header">
+      <h2>Recent Bookings</h2>
+      <p class="muted"><%= bookings.length %> booking(s)</p>
+    </header>
+
+    <% if (!bookings || bookings.length === 0) { %>
+    <div class="bookings-empty">
+      <h3>No bookings yet</h3>
+      <p class="muted">When users book your spaces, they will appear here.</p>
+    </div>
+    <% } else { %>
+    <div class="table-wrapper">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>User</th>
+            <th>Space</th>
+            <th>Date</th>
+            <th>Time</th>
+            <th>Total</th>
+            <th>Commission (<%= (commissionRate * 100).toFixed(0) %>%)</th>
+            <th>Your Earnings</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% bookings.forEach((b) => { %>
+          <% const start = new Date(b.start_time); %>
+          <% const end = new Date(b.end_time); %>
+          <tr>
+            <td>#<%= b.id %></td>
+            <td><%= b.user_name %></td>
+            <td><%= b.parking_name %></td>
+            <td><%= b.booking_date || start.toLocaleDateString() %></td>
+            <td>
+              <%= start.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) %> –
+              <%= end.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) %>
+            </td>
+            <td>₹<%= b.total_amount ? b.total_amount.toFixed(2) : (b.total_price || 0).toFixed(2) %></td>
+            <td class="text-muted">₹<%= b.platform_commission ? b.platform_commission.toFixed(2) : '0.00' %></td>
+            <td class="text-green">₹<%= b.owner_earnings ? b.owner_earnings.toFixed(2) : '0.00' %></td>
+            <td>
+              <span class="badge table-badge table-badge-<%= (b.booking_status || 'Active').toLowerCase() %>">
+                <%= b.booking_status || 'Active' %>
+              </span>
+            </td>
+          </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+    <% } %>
+  </section>
+
+  <section class="owner-section">
+    <header class="owner-section-header">
+      <h2>Your Parking Spaces</h2>
+      <p class="muted"><%= spaces.length %> space(s)</p>
+    </header>
+
+    <% if (!spaces || spaces.length === 0) { %>
+    <p class="muted">You have not added any parking spaces yet.</p>
+    <% } else { %>
+    <div class="parking-grid">
+      <% spaces.forEach(space => { %>
+      <article class="parking-card">
+        <header class="parking-card-header">
+          <div>
+            <h3 class="parking-name"><%= space.title %></h3>
+            <p class="parking-address"><%= space.address %></p>
+          </div>
+        </header>
+        <dl class="parking-meta">
+          <div class="meta-item">
+            <dt>Vehicle</dt>
+            <dd><%= space.vehicle_type %></dd>
+          </div>
+          <div class="meta-item">
+            <dt>Slots</dt>
+            <dd><%= space.available_slots || space.total_slots %> / <%= space.total_slots %></dd>
+          </div>
+          <div class="meta-item">
+            <dt>Time</dt>
+            <dd><%= space.available_from %> – <%= space.available_to %></dd>
+          </div>
+          <div class="meta-item">
+            <dt>Price</dt>
+            <dd>₹<%= space.price_per_hour %> / hour</dd>
+          </div>
+        </dl>
+      </article>
+      <% }) %>
+    </div>
+    <% } %>
+  </section>
+</section>

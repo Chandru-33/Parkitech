@@ -1,0 +1,49 @@
+<section class="auth-card">
+  <h1>Create your account</h1>
+  <p class="muted">
+    First register, then choose whether you are a client (parking space owner) or user (parking renter).
+  </p>
+
+  <% if (error) { %>
+  <div class="alert error"><%= error %></div>
+  <% } %>
+
+  <form action="/register" method="post" class="form">
+    <div class="form-row">
+      <label for="name">Full name</label>
+      <input id="name" name="name" type="text" required />
+    </div>
+
+    <div class="form-row">
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" required />
+    </div>
+
+    <div class="form-row">
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" required minlength="4" />
+    </div>
+
+    <div class="form-row">
+      <label>Choose your role</label>
+      <div class="radio-group">
+        <label>
+          <input type="radio" name="role" value="client" required />
+          Client (I have parking space to share)
+        </label>
+        <label>
+          <input type="radio" name="role" value="user" required />
+          User (I need temporary parking)
+        </label>
+      </div>
+    </div>
+
+    <button type="submit" class="btn primary full-width">Register</button>
+
+    <p class="small">
+      Already registered?
+      <a href="/login">Login here</a>
+    </p>
+  </form>
+</section>
+

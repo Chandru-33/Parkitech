@@ -1,0 +1,27 @@
+<section class="auth-card">
+  <h1>Login</h1>
+
+  <% if (error) { %>
+  <div class="alert error"><%= error %></div>
+  <% } %>
+
+  <form action="/login" method="post" class="form">
+    <div class="form-row">
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" required />
+    </div>
+
+    <div class="form-row">
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" required />
+    </div>
+
+    <button type="submit" class="btn primary full-width">Login</button>
+
+    <p class="small">
+      New here?
+      <a href="/register">Create an account</a>
+    </p>
+  </form>
+</section>
+

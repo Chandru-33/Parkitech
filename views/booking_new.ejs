@@ -1,0 +1,37 @@
+<section class="page-section">
+  <h1>Book parking: <%= space.title %></h1>
+  <p class="muted">
+    Address: <strong><%= space.address %></strong>
+  </p>
+
+  <div class="card">
+    <p><strong>Owner:</strong> <%= space.owner_name %></p>
+    <p><strong>Vehicle type:</strong> <%= space.vehicle_type %></p>
+    <p><strong>Available:</strong> <%= space.available_from %> to <%= space.available_to %></p>
+    <p><strong>Price per hour:</strong> ₹<%= space.price_per_hour %></p>
+  </div>
+
+  <% if (error) { %>
+  <div class="alert error"><%= error %></div>
+  <% } %>
+
+  <form action="/user/book/<%= space.id %>" method="post" class="form">
+    <div class="form-row">
+      <label for="start_time">Start date & time</label>
+      <input id="start_time" name="start_time" type="datetime-local" required />
+    </div>
+
+    <div class="form-row">
+      <label for="end_time">End date & time</label>
+      <input id="end_time" name="end_time" type="datetime-local" required />
+    </div>
+
+    <p class="muted small">
+      For demo purposes, payment is simulated. On submit, your booking will be created and a receipt will be shown with a Google Maps direction link from your current location to this parking address.
+    </p>
+
+    <button type="submit" class="btn primary">Confirm booking & pay</button>
+    <a href="/user/dashboard" class="btn ghost">Back</a>
+  </form>
+</section>
+

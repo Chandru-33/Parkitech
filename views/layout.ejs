@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title><%= typeof title !== 'undefined' ? title : 'SmartPark – Smart Parking Platform' %></title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="top-bar">
+      <div class="top-bar-inner">
+        <a href="/" class="brand">
+          <span class="brand-primary">Smart</span><span class="brand-accent">Park</span>
+        </a>
+        <nav class="nav-main">
+          <a href="/#how-it-works">How It Works</a>
+          <a href="/#for-owners">For Owners</a>
+          <a href="/#for-users">For Users</a>
+          <a href="/#pricing">Pricing</a>
+        </nav>
+        <div class="nav-actions">
+          <% if (!currentUser) { %>
+          <a href="/login" class="nav-link">Login</a>
+          <a href="/register" class="btn nav-register">Register</a>
+          <% } else { %>
+          <span class="welcome">Hi, <%= currentUser.name %> • <%= currentUser.role === 'client' ? 'Owner' : 'User' %></span>
+          <% if (currentUser.role === 'client') { %>
+          <a href="/client/dashboard" class="nav-link">Owner Dashboard</a>
+          <% } else { %>
+          <a href="/user/dashboard" class="nav-link">Find Parking</a>
+          <a href="/user/bookings" class="nav-link">My Bookings</a>
+          <% } %>
+          <form action="/logout" method="post" class="inline-form">
+            <button type="submit" class="btn nav-logout">Logout</button>
+          </form>
+          <% } %>
+        </div>
+      </div>
+    </header>
+
+    <main class="page">
+      <%- body %>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        <div class="footer-brand">
+          <div class="footer-logo">
+            <span class="brand-primary">Smart</span><span class="brand-accent">Park</span>
+          </div>
+          <p class="footer-tagline">
+            Smart, secure, and simple parking for real-world cities.
+          </p>
+        </div>
+        <div class="footer-columns">
+          <div class="footer-column">
+            <h4>Product</h4>
+            <a href="/#how-it-works">How It Works</a>
+            <a href="/#for-users">For Users</a>
+            <a href="/#for-owners">For Owners</a>
+            <a href="/#pricing">Pricing</a>
+          </div>
+          <div class="footer-column">
+            <h4>Company</h4>
+            <a href="/#about">About</a>
+            <a href="/#contact">Contact</a>
+          </div>
+          <div class="footer-column">
+            <h4>Legal</h4>
+            <a href="/#privacy">Privacy Policy</a>
+            <a href="/#terms">Terms</a>
+          </div>
+          <div class="footer-column">
+            <h4>Follow</h4>
+            <div class="footer-social">
+              <button type="button" aria-label="SmartPark on LinkedIn">in</button>
+              <button type="button" aria-label="SmartPark on X">X</button>
+              <button type="button" aria-label="SmartPark on Instagram">IG</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>&copy; <%= new Date().getFullYear() %> SmartPark Technologies Pvt. Ltd. All rights reserved.</span>
+        <span class="footer-region">India (EN)</span>
+      </div>
+    </footer>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
+

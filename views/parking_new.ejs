@@ -1,0 +1,77 @@
+<section class="page-section">
+  <h1>Add a new parking space</h1>
+  <p class="muted">
+    Provide clear details so users can easily find and book your space.
+  </p>
+
+  <% if (error) { %>
+  <div class="alert error"><%= error %></div>
+  <% } %>
+
+  <form action="/client/parking/new" method="post" class="form two-column">
+    <div class="form-col">
+      <div class="form-row">
+        <label for="title">Title</label>
+        <input id="title" name="title" type="text" required placeholder="e.g. Covered car park near station" />
+      </div>
+
+      <div class="form-row">
+        <label for="address">Address</label>
+        <textarea id="address" name="address" rows="2" required></textarea>
+      </div>
+
+      <div class="form-row">
+        <label for="location_description">Location description / landmarks</label>
+        <textarea
+          id="location_description"
+          name="location_description"
+          rows="2"
+          required
+          placeholder="e.g. Behind ABC apartments, opposite XYZ shop"
+        ></textarea>
+      </div>
+    </div>
+
+    <div class="form-col">
+      <div class="form-row">
+        <label for="vehicle_type">Vehicle type</label>
+        <select id="vehicle_type" name="vehicle_type" required>
+          <option value="">Select</option>
+          <option value="two-wheeler">Two wheeler</option>
+          <option value="four-wheeler">Four wheeler</option>
+          <option value="both">Both</option>
+        </select>
+      </div>
+
+      <div class="form-row">
+        <label for="total_slots">How many vehicles can be parked?</label>
+        <input id="total_slots" name="total_slots" type="number" min="1" required />
+      </div>
+
+      <div class="form-row">
+        <label>Available time window</label>
+        <div class="inline-fields">
+          <div>
+            <span class="small-label">From</span>
+            <input type="time" name="available_from" required />
+          </div>
+          <div>
+            <span class="small-label">To</span>
+            <input type="time" name="available_to" required />
+          </div>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label for="price_per_hour">Price per hour (₹)</label>
+        <input id="price_per_hour" name="price_per_hour" type="number" min="0" step="0.5" required />
+      </div>
+    </div>
+
+    <div class="form-actions full-width">
+      <button type="submit" class="btn primary">Save parking space</button>
+      <a href="/client/dashboard" class="btn ghost">Cancel</a>
+    </div>
+  </form>
+</section>
+

@@ -1,0 +1,143 @@
+<section class="page-section">
+  <header class="section-header bookings-header">
+    <div>
+      <p class="section-eyebrow">History</p>
+      <h1>My bookings</h1>
+    </div>
+    <div class="bookings-filters">
+      <span class="bookings-filters-label">Status:</span>
+      <a
+        href="/user/bookings"
+        class="filter-pill <%= statusFilter === 'all' ? 'active' : '' %>"
+      >
+        All
+      </a>
+      <a
+        href="/user/bookings?status=Active"
+        class="filter-pill <%= statusFilter === 'Active' ? 'active' : '' %>"
+      >
+        Active
+      </a>
+      <a
+        href="/user/bookings?status=Completed"
+        class="filter-pill <%= statusFilter === 'Completed' ? 'active' : '' %>"
+      >
+        Completed
+      </a>
+      <a
+        href="/user/bookings?status=Cancelled"
+        class="filter-pill <%= statusFilter === 'Cancelled' ? 'active' : '' %>"
+      >
+        Cancelled
+      </a>
+    </div>
+  </header>
+
+  <% if (!bookings || bookings.length === 0) { %>
+  <div class="bookings-empty">
+    <h2>You have no bookings yet.</h2>
+    <p class="muted">When you book a parking space, it will show up here.</p>
+    <a href="/user/dashboard" class="btn primary">Find Parking</a>
+  </div>
+  <% } else { %>
+  <div class="bookings-grid">
+    <% bookings.forEach((b) => { %>
+    <% const start = new Date(b.start_time); %>
+    <% const end = new Date(b.end_time); %>
+    <% const durationMs = end - start; %>
+    <% const durationHrs = durationMs > 0 ? Math.ceil(durationMs / (1000 * 60 * 60)) : 0; %>
+    <% const total = typeof b.total_amount === 'number' && !Number.isNaN(b.total_amount)
+      ? b.total_amount
+      : b.total_price; %>
+    <% const refund = typeof b.refund_amount === 'number' ? b.refund_amount : null; %>
+    <% const canCancel =
+      (b.booking_status || 'Active') === 'Active' && new Date() < start; %>
+    <article class="booking-card">
+      <header class="booking-card-header">
+        <div>
+          <p class="booking-id">Booking #<%= b.id %></p>
+          <h2 class="booking-title"><%= b.parking_name %></h2>
+          <p class="booking-address"><%= b.parking_address %></p>
+        </div>
+        <div class="booking-status-group">
+          <span class="badge booking-badge booking-badge-status">
+            <%= b.booking_status || 'Active' %>
+          </span>
+          <span class="badge booking-badge booking-badge-payment">
+            <%= b.payment_status || 'Paid' %>
+          </span>
+        </div>
+      </header>
+
+      <div class="booking-body">
+        <dl class="booking-meta">
+          <div>
+            <dt>Vehicle</dt>
+            <dd><%= b.vehicle_type || b.space_vehicle_type || 'N/A' %></dd>
+          </div>
+          <div>
+            <dt>Booked date</dt>
+            <dd><%= b.booking_date || start.toLocaleDateString() %></dd>
+          </div>
+          <div>
+            <dt>Start</dt>
+            <dd><%= start.toLocaleString() %></dd>
+          </div>
+          <div>
+            <dt>End</dt>
+            <dd><%= end.toLocaleString() %></dd>
+          </div>
+          <div>
+            <dt>Duration</dt>
+            <dd><%= durationHrs %> hr(s)</dd>
+          </div>
+          <div>
+            <dt>Total paid</dt>
+            <dd>₹<%= total ? total.toFixed(2) : '0.00' %></dd>
+          </div>
+        </dl>
+
+        <div class="booking-refund">
+          <h3>Refunds</h3>
+          <% if (refund && refund > 0) { %>
+          <p>Refund amount: ₹<%= refund.toFixed(2) %></p>
+          <p>Status: <%= b.refund_status || 'Processed' %></p>
+          <p>
+            Refund date:
+            <%= b.refund_date ? new Date(b.refund_date).toLocaleString() : '-' %>
+          </p>
+          <% } else { %>
+          <p class="muted small">No refund applied for this booking.</p>
+          <% } %>
+        </div>
+      </div>
+
+      <footer class="booking-card-footer">
+        <a
+          href="https://www.google.com/maps/dir/?api=1&destination=<%= encodeURIComponent(
+            b.parking_address
+          ) %>"
+          target="_blank"
+          class="btn ghost btn-compact"
+        >
+          Directions
+        </a>
+        <% if (canCancel) { %>
+        <form
+          action="/user/bookings/<%= b.id %>/cancel"
+          method="post"
+          class="cancel-form"
+          onsubmit="return confirm('Are you sure you want to cancel this booking?');"
+        >
+          <button type="submit" class="btn primary btn-compact">
+            Cancel Booking
+          </button>
+        </form>
+        <% } %>
+      </footer>
+    </article>
+    <% }) %>
+  </div>
+  <% } %>
+</section>
+

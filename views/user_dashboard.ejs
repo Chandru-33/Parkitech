@@ -1,0 +1,248 @@
+<section class="page-section">
+  <header class="section-header search-header">
+    <div>
+      <p class="section-eyebrow">Search</p>
+      <h1>Find parking near you</h1>
+    </div>
+  </header>
+
+  <div class="search-layout">
+    <div class="search-map-wrapper">
+      <div class="search-map-header">
+        <span>Map preview</span>
+        <span class="search-map-status">Based on your current location</span>
+      </div>
+      <div id="search-map" class="search-map-placeholder">
+        <p>Enable location to preview nearby parking on the map.</p>
+      </div>
+    </div>
+
+    <form action="/user/search" method="get" class="search-bar" id="parking-search-form">
+      <input type="hidden" name="user_lat" id="user_lat" value="<%= query.user_lat || '' %>" />
+      <input type="hidden" name="user_lng" id="user_lng" value="<%= query.user_lng || '' %>" />
+      <input type="hidden" name="sort" id="sort" value="<%= query.sort || 'distance' %>" />
+      <div class="search-bar-main">
+        <div class="search-input-group">
+          <label for="location">Location</label>
+          <div class="search-input-with-icon">
+            <input
+              id="location"
+              name="location"
+              type="text"
+              placeholder="Enter area, landmark, or address"
+              value="<%= query.location || '' %>"
+            />
+            <button
+              type="button"
+              class="use-location-btn"
+              title="Use my current location"
+              aria-label="Use my current location"
+            >
+              📍
+            </button>
+          </div>
+        </div>
+
+        <div class="search-input-group">
+          <label for="vehicle_type">Vehicle</label>
+          <select id="vehicle_type" name="vehicle_type">
+            <option value="">Any</option>
+            <option value="two-wheeler" <%= query.vehicle_type === 'two-wheeler' ? 'selected' : '' %>>
+              Two wheeler
+            </option>
+            <option value="four-wheeler" <%= query.vehicle_type === 'four-wheeler' ? 'selected' : '' %>>
+              Four wheeler
+            </option>
+            <option value="both" <%= query.vehicle_type === 'both' ? 'selected' : '' %>>
+              Both
+            </option>
+          </select>
+        </div>
+
+        <div class="search-input-group search-time-group">
+          <label for="time">Time</label>
+          <div class="search-time-fields">
+            <input id="from_time" type="time" />
+            <span class="time-separator">–</span>
+            <input id="to_time" type="time" />
+          </div>
+        </div>
+      </div>
+
+      <button type="submit" class="btn primary search-submit">
+        <span class="search-submit-label">Search</span>
+        <span class="search-submit-loading">Locating…</span>
+      </button>
+    </form>
+  </div>
+
+  <section class="results-section">
+    <header class="results-header">
+      <div>
+        <h2>Parking near you</h2>
+        <p class="results-subtitle">
+          <% if (hasUserLocation && nearbyCount === 0 && spaces && spaces.length > 0) { %>
+          No nearby parking found within 10 km. Showing all Chennai locations.
+          <% } else { %>
+          Showing spaces based on your search. Enable location to see what&apos;s closest.
+          <% } %>
+        </p>
+      </div>
+      <div class="results-meta">
+        <% if (spaces && spaces.length > 0) { %>
+        <span><%= spaces.length %> spaces available</span>
+        <% } %>
+        <div class="results-sort">
+          <span class="results-sort-label">Sort by:</span>
+          <button
+            type="button"
+            class="sort-pill <%= (query.sort || 'distance') === 'distance' ? 'active' : '' %>"
+            data-sort="distance"
+          >
+            Distance
+          </button>
+          <button
+            type="button"
+            class="sort-pill <%= query.sort === 'price' ? 'active' : '' %>"
+            data-sort="price"
+          >
+            Price
+          </button>
+          <button
+            type="button"
+            class="sort-pill <%= query.sort === 'availability' ? 'active' : '' %>"
+            data-sort="availability"
+          >
+            Availability
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <% if (!spaces || spaces.length === 0) { %>
+    <p class="muted">No parking spaces found. Try changing your search or check again later.</p>
+    <% } else { %>
+    <div class="parking-grid">
+      <% spaces.forEach(space => { %>
+      <article
+        class="parking-card"
+        data-title="<%- space.title %>"
+        data-address="<%- space.address %>"
+        data-location="<%- space.location_description %>"
+        data-vehicle="<%- space.vehicle_type %>"
+        data-slots="<%- (space.available_slots || space.total_slots) %>"
+        data-available="<%- space.available_from %> to <%- space.available_to %>"
+        data-price="₹<%- space.price_per_hour %> / hour"
+        data-owner="<%- space.owner_name %>"
+        data-distance="<%- typeof space.distance_km === 'number' ? space.distance_km.toFixed(1) : '' %>"
+      >
+        <header class="parking-card-header">
+          <div>
+            <h3 class="parking-name"><%= space.title %></h3>
+            <p class="parking-address"><%= space.address %></p>
+          </div>
+          <div class="parking-badges">
+            <% if (space.is_verified) { %>
+            <span class="badge badge-verified">Verified owner</span>
+            <% } %>
+            <span class="badge badge-rating">⭐ <%= space.rating || '4.0' %></span>
+          </div>
+        </header>
+
+        <dl class="parking-meta">
+          <div class="meta-item">
+            <dt>Vehicle</dt>
+            <dd>
+              <span class="vehicle-icon">🚗</span>
+              <span><%= space.vehicle_type %></span>
+            </dd>
+          </div>
+          <div class="meta-item">
+            <dt>Slots</dt>
+            <dd>
+              <span><%= space.available_slots || space.total_slots %> available</span>
+              <% if ((space.available_slots || space.total_slots) === 1) { %>
+              <span class="badge badge-low">Only 1 slot left</span>
+              <% } %>
+            </dd>
+          </div>
+          <div class="meta-item">
+            <dt>Time</dt>
+            <dd><%= space.available_from %> – <%= space.available_to %></dd>
+          </div>
+          <div class="meta-item">
+            <dt>Price</dt>
+            <dd>₹<%= space.price_per_hour %> / hour</dd>
+          </div>
+          <div class="meta-item">
+            <dt>Distance</dt>
+            <dd class="distance-label">
+              <% if (typeof space.distance_km === 'number') { %>
+              <%= space.distance_km.toFixed(1) %> km away
+              <% } else { %>
+              —
+              <% } %>
+            </dd>
+          </div>
+        </dl>
+
+        <footer class="parking-card-footer">
+          <a href="/user/book/<%= space.id %>" class="btn primary btn-compact">Book Now</a>
+          <button type="button" class="btn ghost btn-compact more-details-btn">Details</button>
+        </footer>
+      </article>
+      <% }) %>
+    </div>
+
+    <div class="results-pagination">
+      <button type="button" class="btn ghost btn-compact">Load more</button>
+    </div>
+    <% } %>
+  </section>
+
+  <button class="sticky-filter-btn" type="button">
+    Filters
+  </button>
+</section>
+
+<div class="parking-modal" id="parking-modal" aria-hidden="true">
+  <div class="parking-modal-backdrop"></div>
+  <div class="parking-modal-dialog">
+    <header class="parking-modal-header">
+      <div>
+        <h3 id="modal-title"></h3>
+        <p id="modal-address"></p>
+      </div>
+      <button type="button" class="modal-close-btn" aria-label="Close details">×</button>
+    </header>
+    <div class="parking-modal-body">
+      <dl class="modal-details">
+        <div>
+          <dt>Owner</dt>
+          <dd id="modal-owner"></dd>
+        </div>
+        <div>
+          <dt>Location notes</dt>
+          <dd id="modal-location"></dd>
+        </div>
+        <div>
+          <dt>Vehicle</dt>
+          <dd id="modal-vehicle"></dd>
+        </div>
+        <div>
+          <dt>Slots</dt>
+          <dd id="modal-slots"></dd>
+        </div>
+        <div>
+          <dt>Available</dt>
+          <dd id="modal-available"></dd>
+        </div>
+        <div>
+          <dt>Price</dt>
+          <dd id="modal-price"></dd>
+        </div>
+      </dl>
+    </div>
+  </div>
+</div>
+
