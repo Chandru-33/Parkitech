@@ -1,6 +1,9 @@
 {
   "name": "parking-middleman-app",
   "version": "1.0.0",
+  "engines": {
+    "node": "18.x" 
+  },
   "description": "Simple parking space middleman app with owners (clients) and renters (users).",
   "main": "server.js",
   "scripts": {
