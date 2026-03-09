@@ -210,4 +210,269 @@ document.addEventListener('DOMContentLoaded', () => {
       ctx.fillText(labels[i], x + barW / 2, H - pad.bottom + 16);
     });
   }
+
+  // =========================
+  // Chatbot assistant
+  // =========================
+  const chatbotPanel = document.getElementById('chatbot-panel');
+  const chatbotFab = document.getElementById('chatbot-fab');
+  const messagesEl = document.getElementById('chatbot-messages');
+  const quickRepliesEl = document.getElementById('chatbot-quick-replies');
+  const chatbotForm = document.getElementById('chatbot-form');
+  const chatbotInput = document.getElementById('chatbot-input');
+
+  if (chatbotFab && chatbotPanel) {
+    chatbotFab.addEventListener('click', () => {
+      chatbotPanel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  }
+
+  if (chatbotPanel && messagesEl && chatbotForm && chatbotInput) {
+    let chatbotState = {
+      step: 'idle', // idle | awaiting_location | awaiting_time | confirm
+      selectedSpace: null,
+      pendingTime: null,
+    };
+
+    function appendMessage(role, text) {
+      const bubble = document.createElement('div');
+      bubble.className = `chatbot-bubble ${role}`;
+      bubble.innerHTML = text;
+      messagesEl.appendChild(bubble);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    function setQuickReplies(buttons) {
+      quickRepliesEl.innerHTML = '';
+      (buttons || []).forEach((btn) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = btn.label;
+        b.dataset.value = btn.value;
+        b.addEventListener('click', () => btn.onClick(btn.value));
+        quickRepliesEl.appendChild(b);
+      });
+    }
+
+    async function fetchJSON(url, options) {
+      const res = await fetch(url, {
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        ...options,
+      });
+      if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+      return res.json();
+    }
+
+    async function startBookingFlow() {
+      appendMessage('bot', 'Sure! Please select a location.');
+      try {
+        const data = await fetchJSON('/chatbot/get-locations');
+        if (!data.locations || !data.locations.length) {
+          appendMessage('bot', 'No available locations at the moment. Try changing your search.');
+          setQuickReplies([]);
+          return;
+        }
+        setQuickReplies(
+          data.locations.slice(0, 6).map((loc) => ({
+            label: loc.title,
+            value: String(loc.id),
+            onClick: (id) => onLocationSelected(data.locations.find((l) => String(l.id) === id)),
+          }))
+        );
+        chatbotState.step = 'awaiting_location';
+      } catch (e) {
+        console.error(e);
+        appendMessage('bot', 'I could not fetch locations right now. Please try again.');
+        setQuickReplies([]);
+      }
+    }
+
+    function onLocationSelected(space) {
+      if (!space) return;
+      chatbotState.selectedSpace = space;
+      appendMessage('user', space.title);
+      appendMessage(
+        'bot',
+        `Great! You selected <strong>${space.title}</strong> at ${space.address}.<br/>` +
+          'Please choose your parking time:'
+      );
+      setQuickReplies([
+        { label: '30 min', value: '30', onClick: (v) => onDurationSelected(v) },
+        { label: '1 hour', value: '60', onClick: (v) => onDurationSelected(v) },
+        { label: '2 hours', value: '120', onClick: (v) => onDurationSelected(v) },
+      ]);
+      chatbotState.step = 'awaiting_time';
+    }
+
+    async function onDurationSelected(minutesStr) {
+      const minutes = parseInt(minutesStr, 10) || 60;
+      chatbotState.pendingTime = { durationMinutes: minutes };
+      appendMessage('user', `${minutes} minutes`);
+
+      const now = new Date();
+      const startISO = now.toISOString().slice(0, 16); // yyyy-MM-ddTHH:mm
+
+      try {
+        const data = await fetchJSON('/chatbot/check-availability', {
+          method: 'POST',
+          body: JSON.stringify({
+            spaceId: chatbotState.selectedSpace.id,
+            start_time: startISO,
+            duration_minutes: minutes,
+          }),
+        });
+
+        if (!data.available) {
+          appendMessage('bot', data.message || 'That slot is not available for the requested time.');
+          setQuickReplies([]);
+          chatbotState = { step: 'idle', selectedSpace: null, pendingTime: null };
+          return;
+        }
+
+        chatbotState.pendingTime.start_time = data.start_time;
+        chatbotState.pendingTime.end_time = data.end_time;
+        chatbotState.pendingTime.amount = data.amount;
+
+        appendMessage(
+          'bot',
+          `I found an available slot at <strong>${data.space.title}</strong>.<br/>` +
+            `Time: ${data.human_start} for ${data.human_duration}.<br/>` +
+            `Price: <strong>₹${data.amount.toFixed(2)}</strong>.<br/>` +
+            'Confirm booking?'
+        );
+
+        setQuickReplies([
+          { label: 'Confirm', value: 'confirm', onClick: () => confirmBooking() },
+          { label: 'Cancel', value: 'cancel', onClick: () => cancelFlow() },
+        ]);
+        chatbotState.step = 'confirm';
+      } catch (e) {
+        console.error(e);
+        appendMessage('bot', 'I had trouble checking availability. Please try again.');
+        setQuickReplies([]);
+        chatbotState = { step: 'idle', selectedSpace: null, pendingTime: null };
+      }
+    }
+
+    async function confirmBooking() {
+      appendMessage('user', 'Confirm');
+      try {
+        const data = await fetchJSON('/chatbot/book-slot', {
+          method: 'POST',
+          body: JSON.stringify({
+            spaceId: chatbotState.selectedSpace.id,
+            start_time: chatbotState.pendingTime.start_time,
+            end_time: chatbotState.pendingTime.end_time,
+            duration_minutes: chatbotState.pendingTime.durationMinutes,
+          }),
+        });
+        if (!data.success) {
+          appendMessage('bot', data.message || 'Booking failed. Please try again.');
+          setQuickReplies([]);
+          chatbotState = { step: 'idle', selectedSpace: null, pendingTime: null };
+          return;
+        }
+
+        appendMessage(
+          'bot',
+          `Booking confirmed! Booking ID: <strong>${data.booking.id}</strong>.<br/>` +
+            `₹${data.booking.amount.toFixed(2)} paid.`
+        );
+        appendMessage(
+          'bot',
+          'You can see this booking in your history. You can also cancel it from the bookings page.'
+        );
+        setQuickReplies([
+          {
+            label: 'Download receipt',
+            value: 'receipt',
+            onClick: () => downloadReceipt(data.booking.id),
+          },
+        ]);
+        chatbotState = { step: 'idle', selectedSpace: null, pendingTime: null };
+      } catch (e) {
+        console.error(e);
+        appendMessage('bot', 'Something went wrong while creating your booking. Please try again.');
+        setQuickReplies([]);
+        chatbotState = { step: 'idle', selectedSpace: null, pendingTime: null };
+      }
+    }
+
+    async function downloadReceipt(bookingId) {
+      try {
+        const data = await fetchJSON(`/chatbot/generate-receipt?bookingId=${encodeURIComponent(bookingId)}`);
+        const w = window.open('', '_blank');
+        if (!w) return;
+        w.document.write(data.html || '<p>Receipt unavailable.</p>');
+        w.document.close();
+      } catch (e) {
+        console.error(e);
+        appendMessage('bot', 'Could not generate receipt. Please try again from your bookings page.');
+      }
+    }
+
+    function cancelFlow() {
+      appendMessage('user', 'Cancel');
+      appendMessage('bot', 'Okay, cancelled this booking flow. You can type “Book a slot” to start again.');
+      setQuickReplies([]);
+      chatbotState = { step: 'idle', selectedSpace: null, pendingTime: null };
+    }
+
+    function handleKnowledgeQuestion(text) {
+      const lower = text.toLowerCase();
+      if (lower.includes('nearest') || lower.includes('near')) {
+        appendMessage(
+          'bot',
+          'Use the Location field and enable your device location to find parking closest to you.'
+        );
+      } else if (lower.includes('price')) {
+        appendMessage(
+          'bot',
+          'Prices vary per location. I will show you an exact price when you pick a parking space and time.'
+        );
+      } else if (lower.includes('how long') || lower.includes('duration')) {
+        appendMessage('bot', 'You can usually park from 30 minutes up to several hours, depending on availability.');
+      } else if (lower.includes('cancel')) {
+        appendMessage(
+          'bot',
+          'You can cancel a booking from the “My bookings” page as long as the start time has not passed.'
+        );
+      } else {
+        appendMessage(
+          'bot',
+          "I'm here to help you search for parking and book a slot, and to answer basic questions about SmartPark."
+        );
+      }
+    }
+
+    chatbotForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const text = chatbotInput.value.trim();
+      if (!text) return;
+      appendMessage('user', text);
+      chatbotInput.value = '';
+
+      if (text.toLowerCase().includes('book a slot')) {
+        chatbotState = { step: 'idle', selectedSpace: null, pendingTime: null };
+        startBookingFlow();
+        return;
+      }
+
+      if (chatbotState.step === 'awaiting_location') {
+        appendMessage('bot', 'Please tap one of the location buttons I showed you.');
+        return;
+      }
+      if (chatbotState.step === 'awaiting_time') {
+        appendMessage('bot', 'Use the duration buttons to choose your parking time.');
+        return;
+      }
+      if (chatbotState.step === 'confirm') {
+        appendMessage('bot', 'Tap Confirm or Cancel to continue.');
+        return;
+      }
+
+      handleKnowledgeQuestion(text);
+    });
+  }
 });

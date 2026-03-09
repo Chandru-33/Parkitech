@@ -37,21 +37,23 @@
   <div class="bookings-empty">
     <h2>You have no bookings yet.</h2>
     <p class="muted">When you book a parking space, it will show up here.</p>
-    <a href="/user/dashboard" class="btn primary">Find Parking</a>
+    <a href="/user/search" class="btn primary">Find Parking</a>
   </div>
   <% } else { %>
   <div class="bookings-grid">
     <% bookings.forEach((b) => { %>
-    <% const start = new Date(b.start_time); %>
-    <% const end = new Date(b.end_time); %>
-    <% const durationMs = end - start; %>
-    <% const durationHrs = durationMs > 0 ? Math.ceil(durationMs / (1000 * 60 * 60)) : 0; %>
+    <% const start = b.start_time ? new Date(b.start_time) : null; %>
+    <% const end = b.end_time ? new Date(b.end_time) : null; %>
+    <% const startValid = start && !Number.isNaN(start.getTime()); %>
+    <% const endValid = end && !Number.isNaN(end.getTime()); %>
+    <% const durationMs = (startValid && endValid) ? (end - start) : 0; %>
+    <% const durationHrs = durationMs > 0 ? Math.ceil(durationMs / (1000 * 60 * 60)) : (b.duration || 1); %>
     <% const total = typeof b.total_amount === 'number' && !Number.isNaN(b.total_amount)
       ? b.total_amount
-      : b.total_price; %>
+      : (Number(b.amount) || Number(b.total_price) || 0); %>
     <% const refund = typeof b.refund_amount === 'number' ? b.refund_amount : null; %>
     <% const canCancel =
-      (b.booking_status || 'Active') === 'Active' && new Date() < start; %>
+      (b.booking_status || 'Active') === 'Active' && startValid && new Date() < start; %>
     <article class="booking-card">
       <header class="booking-card-header">
         <div>
@@ -77,15 +79,15 @@
           </div>
           <div>
             <dt>Booked date</dt>
-            <dd><%= b.booking_date || start.toLocaleDateString() %></dd>
+            <dd><%= b.booking_date || (startValid ? start.toLocaleDateString() : '—') %></dd>
           </div>
           <div>
             <dt>Start</dt>
-            <dd><%= start.toLocaleString() %></dd>
+            <dd><%= startValid ? start.toLocaleString() : (b.start_time || '—') %></dd>
           </div>
           <div>
             <dt>End</dt>
-            <dd><%= end.toLocaleString() %></dd>
+            <dd><%= endValid ? end.toLocaleString() : (b.end_time || '—') %></dd>
           </div>
           <div>
             <dt>Duration</dt>
@@ -93,7 +95,7 @@
           </div>
           <div>
             <dt>Total paid</dt>
-            <dd>₹<%= total ? total.toFixed(2) : '0.00' %></dd>
+            <dd>₹<%= (Number(total) || 0).toFixed(2) %></dd>
           </div>
         </dl>
 

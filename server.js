@@ -1,74 +1,30 @@
+require('dotenv').config();
+
 const express = require('express');
 const path = require('path');
-const bodyParser = require('body-parser');
 const session = require('express-session');
-const bcrypt = require('bcryptjs');
 const expressLayouts = require('express-ejs-layouts');
-const db = require('./db');
-
-const COMMISSION_RATE = db.COMMISSION_RATE || 0.30;
+const db = require('./config/db');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
 
-function toRad(deg) {
-  return (deg * Math.PI) / 180;
-}
-
-function haversineKm(lat1, lon1, lat2, lon2) {
-  const R = 6371;
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(lat1)) *
-      Math.cos(toRad(lat2)) *
-      Math.sin(dLon / 2) *
-      Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
-
-function attachDistances(spaces, lat, lng) {
-  spaces.forEach((space) => {
-    if (
-      typeof space.latitude === 'number' &&
-      typeof space.longitude === 'number' &&
-      !Number.isNaN(space.latitude) &&
-      !Number.isNaN(space.longitude)
-    ) {
-      space.distance_km = haversineKm(lat, lng, space.latitude, space.longitude);
-    } else {
-      space.distance_km = null;
-    }
-  });
-}
-
-function sortSpaces(spaces, sortBy) {
-  spaces.sort((a, b) => {
-    if (sortBy === 'price') {
-      return (a.price_per_hour || 0) - (b.price_per_hour || 0);
-    }
-    if (sortBy === 'availability') {
-      return (b.available_slots || 0) - (a.available_slots || 0);
-    }
-    const da = typeof a.distance_km === 'number' ? a.distance_km : Number.POSITIVE_INFINITY;
-    const dbv = typeof b.distance_km === 'number' ? b.distance_km : Number.POSITIVE_INFINITY;
-    return da - dbv;
-  });
-}
-
+// =========================
+// 🔹 MIDDLEWARE
+// =========================
+app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 app.use(expressLayouts);
 app.set('layout', 'layout');
 
-app.use(express.static(path.join(__dirname, 'public')));
-app.use(bodyParser.urlencoded({ extended: true }));
-
+// =========================
+// 🔹 SESSION SETUP
+// =========================
 app.use(
   session({
-    secret: 'super-secret-parking-key',
+    secret: 'smartpark-secret',
     resave: false,
     saveUninitialized: false,
   })
@@ -79,435 +35,913 @@ app.use((req, res, next) => {
   next();
 });
 
-function requireAuth(req, res, next) {
+// Enrich session with user name for layout (session stores only id, role)
+app.use(async (req, res, next) => {
+  if (req.session.user && !req.session.user.name) {
+
+    try {
+      const [[u]] = await db.query('SELECT name FROM users WHERE id = ?', [req.session.user.id]);
+      if (u) req.session.user.name = u.name;
+    } catch (e) { /* ignore */ }
+  }
+  next();
+});
+
+// =========================
+// 🔹 AUTH HELPERS
+// =========================
+const requireAuth = (req, res, next) => {
   if (!req.session.user) return res.redirect('/login');
   next();
+};
+
+const requireRole = (role) => (req, res, next) => {
+  if (!req.session.user) return res.redirect('/login');
+  if (req.session.user.role !== role) return res.status(403).send('Forbidden');
+  next();
+};
+
+// Helper: safe date handling to avoid RangeError
+function safeDateISO(val) {
+  if (val == null || val === '') return null;
+  const d = new Date(val);
+  if (Number.isNaN(d.getTime())) return null;
+  try { return d.toISOString(); } catch (e) { return null; }
+}
+function safeDate(val) {
+  if (val == null || val === '') return null;
+  const d = new Date(val);
+  return !Number.isNaN(d.getTime()) ? d : null;
 }
 
-function requireRole(role) {
-  return (req, res, next) => {
-    if (!req.session.user || req.session.user.role !== role) {
-      return res.status(403).send('Forbidden');
-    }
-    next();
-  };
-}
+// =========================
+// 🔹 ROUTES
+// =========================
 
-// --------------- Public routes ---------------
+app.get('/', (req, res) => {
+  res.render('index');
+});
 
-app.get('/', (req, res) => res.render('index'));
-
+// REGISTER
 app.get('/register', (req, res) => res.render('register', { error: null }));
 
 app.post('/register', async (req, res) => {
-  const { name, email, password, role } = req.body;
-  if (!name || !email || !password || !role) {
-    return res.render('register', { error: 'All fields are required.' });
-  }
-  if (!['client', 'user'].includes(role)) {
-    return res.render('register', { error: 'Invalid role selected.' });
-  }
   try {
-    const passwordHash = await bcrypt.hash(password, 10);
-    const stmt = db.prepare(
-      'INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)'
+    const { name, email, password, role } = req.body;
+    if (!name || !email || !password || !role) {
+      return res.render('register', { error: 'All fields are required.' });
+    }
+    const normalizedEmail = email.trim().toLowerCase();
+    const [rows] = await db.query('SELECT id FROM users WHERE email = ?', [normalizedEmail]);
+    if (rows.length > 0) {
+      return res.render('register', { error: 'Email is already registered. Please log in.' });
+    }
+    const [result] = await db.query(
+      'INSERT INTO users (name, email, password, password_hash, role) VALUES (?, ?, ?, ?, ?)',
+      [name, normalizedEmail, password, password, role]
     );
-    stmt.run(name, email, passwordHash, role, function (err) {
-      if (err) {
-        const message = err.message && err.message.includes('UNIQUE')
-          ? 'Email already registered. Please log in.'
-          : 'Something went wrong. Try a different email.';
-        return res.render('register', { error: message });
+    req.session.user = { id: result.insertId, role };
+    if (role === 'client') {
+      try {
+        await db.query(
+          'INSERT INTO client (name, email, password_hash, user_id) VALUES (?, ?, ?, ?)',
+          [name, normalizedEmail, password, result.insertId]
+        );
+      } catch (e) {
+        // client row may already exist
       }
-      req.session.user = { id: this.lastID, name, email, role };
-      return res.redirect(role === 'client' ? '/client/dashboard' : '/user/dashboard');
-    });
-  } catch {
-    return res.render('register', { error: 'Server error. Please try again.' });
+    }
+    const redirectTo = role === 'client' ? '/client-dashboard' : '/dashboard';
+    res.redirect(redirectTo);
+  } catch (err) {
+    console.error(err);
+    res.render('register', { error: 'Database error. Please try again.' });
   }
 });
 
+// LOGIN
 app.get('/login', (req, res) => res.render('login', { error: null }));
 
-app.post('/login', (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password) {
-    return res.render('login', { error: 'Email and password are required.' });
+app.post('/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    if (!email || !password) {
+      return res.render('login', { error: 'Email and password are required.' });
+    }
+    const normalizedEmail = email.trim().toLowerCase();
+    const [results] = await db.query('SELECT * FROM users WHERE email = ? AND password = ?', [
+      normalizedEmail,
+      password,
+    ]);
+    if (results.length === 0) {
+      return res.render('login', { error: 'Invalid email or password.' });
+    }
+    const user = results[0];
+    req.session.user = { id: user.id, role: user.role };
+    const redirectTo = user.role === 'client' ? '/client-dashboard' : '/dashboard';
+    res.redirect(redirectTo);
+  } catch (err) {
+    console.error(err);
+    res.render('login', { error: 'Database error. Please try again.' });
   }
-  db.get('SELECT * FROM users WHERE email = ?', [email], async (err, user) => {
-    if (err || !user) return res.render('login', { error: 'Invalid email or password.' });
-    const match = await bcrypt.compare(password, user.password_hash);
-    if (!match) return res.render('login', { error: 'Invalid email or password.' });
-    req.session.user = { id: user.id, name: user.name, email: user.email, role: user.role };
-    return res.redirect(user.role === 'client' ? '/client/dashboard' : '/user/dashboard');
-  });
 });
 
 app.post('/logout', (req, res) => {
   req.session.destroy(() => res.redirect('/'));
 });
 
-// --------------- Owner (client) routes ---------------
+// =========================
+// CLIENT ROUTES
+// =========================
 
-app.get('/client/dashboard', requireAuth, requireRole('client'), (req, res) => {
-  const ownerId = req.session.user.id;
-
-  const spacesSql = 'SELECT * FROM parking_spaces WHERE owner_id = ? ORDER BY created_at DESC';
-  const statsSql = `
-    SELECT
-      COALESCE(SUM(b.owner_earnings), 0) as total_earnings,
-      COUNT(b.id) as total_bookings,
-      COALESCE(SUM(CASE WHEN b.booking_status = 'Active' THEN b.owner_earnings ELSE 0 END), 0) as pending_payout,
-      COALESCE(SUM(CASE WHEN b.booking_status = 'Completed' THEN b.owner_earnings ELSE 0 END), 0) as completed_payout,
-      COALESCE(SUM(CASE WHEN DATE(b.created_at) = DATE('now') THEN b.owner_earnings ELSE 0 END), 0) as today_earnings
-    FROM bookings b
-    JOIN parking_spaces ps ON b.parking_space_id = ps.id
-    WHERE ps.owner_id = ? AND b.booking_status != 'Cancelled'
-  `;
-  const bookingsSql = `
-    SELECT
-      b.*,
-      ps.title as parking_name,
-      u.name as user_name
-    FROM bookings b
-    JOIN parking_spaces ps ON b.parking_space_id = ps.id
-    JOIN users u ON b.user_id = u.id
-    WHERE ps.owner_id = ?
-    ORDER BY b.created_at DESC
-    LIMIT 50
-  `;
-  const monthlySql = `
-    SELECT
-      strftime('%Y-%m', b.created_at) as month,
-      COALESCE(SUM(b.owner_earnings), 0) as earnings
-    FROM bookings b
-    JOIN parking_spaces ps ON b.parking_space_id = ps.id
-    WHERE ps.owner_id = ? AND b.booking_status != 'Cancelled'
-    GROUP BY month
-    ORDER BY month ASC
-    LIMIT 12
-  `;
-
-  db.all(spacesSql, [ownerId], (err, spaces) => {
-    if (err) return res.status(500).send('Error loading parking spaces.');
-
-    db.get(statsSql, [ownerId], (err2, stats) => {
-      if (err2) stats = { total_earnings: 0, total_bookings: 0, pending_payout: 0, completed_payout: 0, today_earnings: 0 };
-
-      db.all(bookingsSql, [ownerId], (err3, bookings) => {
-        if (err3) bookings = [];
-
-        db.all(monthlySql, [ownerId], (err4, monthlyData) => {
-          if (err4) monthlyData = [];
-
-          res.render('client_dashboard', {
-            spaces,
-            stats: stats || { total_earnings: 0, total_bookings: 0, pending_payout: 0, completed_payout: 0, today_earnings: 0 },
-            bookings,
-            monthlyData,
-            commissionRate: COMMISSION_RATE,
-          });
-        });
-      });
-    });
-  });
-});
-
-app.get('/client/bookings/export', requireAuth, requireRole('client'), (req, res) => {
-  const ownerId = req.session.user.id;
-  const sql = `
-    SELECT
-      b.id as booking_id,
-      u.name as user_name,
-      ps.title as parking_name,
-      b.booking_date,
-      b.start_time,
-      b.end_time,
-      b.total_amount,
-      b.platform_commission,
-      b.owner_earnings,
-      b.payment_status,
-      b.booking_status,
-      b.created_at
-    FROM bookings b
-    JOIN parking_spaces ps ON b.parking_space_id = ps.id
-    JOIN users u ON b.user_id = u.id
-    WHERE ps.owner_id = ?
-    ORDER BY b.created_at DESC
-  `;
-  db.all(sql, [ownerId], (err, rows) => {
-    if (err) return res.status(500).send('Export error.');
-    const header = 'Booking ID,User,Parking,Date,Start,End,Total,Commission,Owner Earnings,Payment,Status,Created\n';
-    const csvRows = rows.map((r) =>
-      [r.booking_id, `"${r.user_name}"`, `"${r.parking_name}"`, r.booking_date, r.start_time, r.end_time, r.total_amount, r.platform_commission, r.owner_earnings, r.payment_status, r.booking_status, r.created_at].join(',')
+// GET /client-dashboard – Bookings on your slots + Your Parking Spaces
+app.get('/client-dashboard', requireRole('client'), async (req, res) => {
+  try {
+    const ownerId = req.session.user.id;
+    const [bookings] = await db.query(
+      `SELECT b.*, u.name AS user_name, u.email, ps.title AS parking_name
+       FROM bookings b
+       JOIN users u ON b.user_id = u.id
+       JOIN parking_spaces ps ON b.parking_space_id = ps.id
+       WHERE ps.owner_id = ?
+       ORDER BY b.id DESC`,
+      [ownerId]
     );
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', 'attachment; filename=bookings-export.csv');
-    res.send(header + csvRows.join('\n'));
-  });
+    const activeBookings = bookings.filter((b) => (b.booking_status || b.status) !== 'Cancelled');
+    const [spaces] = await db.query(
+      'SELECT * FROM parking_spaces WHERE owner_id = ? ORDER BY id DESC',
+      [ownerId]
+    );
+    const stats = {
+      total_earnings: activeBookings.reduce((s, b) => s + (Number(b.client_amount) || Number(b.amount) || 0), 0),
+      total_bookings: bookings.length,
+      pending_payout: 0,
+      today_earnings: 0,
+    };
+    res.render('client_dashboard', {
+      stats,
+      monthlyData: [],
+      bookings: bookings.map((b) => {
+        const startStr = b.booking_date && b.start_time
+          ? `${b.booking_date}T${String(b.start_time).slice(0, 8)}`
+          : (b.created_at || null);
+        const endStr = b.booking_date && b.end_time
+          ? `${b.booking_date}T${String(b.end_time).slice(0, 8)}`
+          : null;
+        return {
+          ...b,
+          booking_status: b.booking_status || b.status || 'Active',
+          total_amount: b.amount,
+          start_time: safeDateISO(startStr) || safeDateISO(b.start_time),
+          end_time: safeDateISO(endStr) || safeDateISO(b.end_time),
+        };
+      }),
+      spaces,
+      commissionRate: 0.1,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).render('client_dashboard', {
+      stats: { total_earnings: 0, total_bookings: 0, pending_payout: 0, today_earnings: 0 },
+      monthlyData: [],
+      bookings: [],
+      spaces: [],
+      commissionRate: 0.1,
+    });
+  }
 });
 
-app.get('/client/parking/new', requireAuth, requireRole('client'), (req, res) => {
+// POST /delete-parking/:id – Delete parking slot (owner only)
+app.post('/delete-parking/:id', requireRole('client'), async (req, res) => {
+  try {
+    const spaceId = parseInt(req.params.id, 10);
+    const ownerId = req.session.user.id;
+    const [result] = await db.query(
+      'DELETE FROM parking_spaces WHERE id = ? AND owner_id = ?',
+      [spaceId, ownerId]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).send('Parking space not found or you do not have permission to delete it.');
+    }
+    res.redirect('/my-parkings');
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Could not delete parking space.');
+  }
+});
+
+// GET /my-parkings – Your Parking Spaces
+app.get('/my-parkings', requireRole('client'), async (req, res) => {
+  try {
+    const ownerId = req.session.user.id;
+    const [spaces] = await db.query(
+      'SELECT * FROM parking_spaces WHERE owner_id = ? ORDER BY id DESC',
+      [ownerId]
+    );
+    res.render('my_parkings', { spaces });
+  } catch (err) {
+    console.error(err);
+    res.render('my_parkings', { spaces: [] });
+  }
+});
+
+// Add parking form
+app.get('/client/parking/new', requireRole('client'), (req, res) => {
   res.render('parking_new', { error: null });
 });
 
-app.post('/client/parking/new', requireAuth, requireRole('client'), (req, res) => {
-  const { title, address, location_description, vehicle_type, total_slots, available_from, available_to, price_per_hour } = req.body;
-  if (!title || !address || !location_description || !vehicle_type || !total_slots || !available_from || !available_to || !price_per_hour) {
-    return res.render('parking_new', { error: 'All fields are required.' });
+// POST /add-parking – Insert into client table
+app.post('/add-parking', requireRole('client'), async (req, res) => {
+  try {
+    const ownerId = req.session.user.id;
+    const {
+      title,
+      address,
+      location_description,
+      vehicle_type,
+      total_slots,
+      available_from,
+      available_to,
+      price_per_hour,
+    } = req.body;
+
+    if (
+      !title ||
+      !address ||
+      !location_description ||
+      !vehicle_type ||
+      !total_slots ||
+      !available_from ||
+      !available_to ||
+      !price_per_hour
+    ) {
+      return res.render('parking_new', { error: 'All fields are required.' });
+    }
+
+    const total = Math.max(1, parseInt(total_slots, 10) || 1);
+    await db.query(
+      `INSERT INTO parking_spaces
+        (owner_id, title, address, location, location_description, vehicle_type, total_slots, available_slots, available_from, available_to, price_per_hour)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        ownerId,
+        title,
+        address,
+        address,
+        location_description,
+        vehicle_type,
+        total,
+        total,
+        available_from,
+        available_to,
+        price_per_hour,
+      ]
+    );
+    res.redirect('/my-parkings');
+  } catch (err) {
+    console.error(err);
+    res.render('parking_new', {
+      error: 'Could not save parking space. Please try again.',
+    });
   }
-  const stmt = db.prepare(
-    `INSERT INTO parking_spaces
-    (owner_id, title, address, location_description, vehicle_type, total_slots, available_from, available_to, price_per_hour)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  );
-  stmt.run(req.session.user.id, title, address, location_description, vehicle_type, Number(total_slots), available_from, available_to, Number(price_per_hour), (err) => {
-    if (err) return res.render('parking_new', { error: 'Could not save parking space. Try again.' });
-    res.redirect('/client/dashboard');
-  });
 });
 
-// --------------- User routes ---------------
+// Legacy form posts here – same logic as /add-parking
+app.post('/client/parking/new', requireRole('client'), async (req, res) => {
+  try {
+    const ownerId = req.session.user.id;
+    const {
+      title,
+      address,
+      location_description,
+      vehicle_type,
+      total_slots,
+      available_from,
+      available_to,
+      price_per_hour,
+    } = req.body;
+    if (
+      !title ||
+      !address ||
+      !location_description ||
+      !vehicle_type ||
+      !total_slots ||
+      !available_from ||
+      !available_to ||
+      !price_per_hour
+    ) {
+      return res.render('parking_new', { error: 'All fields are required.' });
+    }
+    const total = Math.max(1, parseInt(total_slots, 10) || 1);
+    await db.query(
+      `INSERT INTO parking_spaces
+        (owner_id, title, address, location, location_description, vehicle_type, total_slots, available_slots, available_from, available_to, price_per_hour)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        ownerId,
+        title,
+        address,
+        address,
+        location_description,
+        vehicle_type,
+        total,
+        total,
+        available_from,
+        available_to,
+        price_per_hour,
+      ]
+    );
+    res.redirect('/my-parkings');
+  } catch (err) {
+    console.error(err);
+    res.render('parking_new', { error: 'Could not save parking space. Please try again.' });
+  }
+});
 
-app.get('/user/dashboard', requireAuth, requireRole('user'), (req, res) => {
-  db.all(
-    'SELECT ps.*, u.name as owner_name FROM parking_spaces ps JOIN users u ON ps.owner_id = u.id ORDER BY ps.created_at DESC',
-    [],
-    (err, spaces) => {
-      if (err) return res.status(500).send('Error loading parking spaces.');
-      res.render('user_dashboard', {
-        spaces,
-        query: { location: '', vehicle_type: '', sort: 'distance' },
-        nearbyCount: null,
-        hasUserLocation: false,
+// =========================
+// USER ROUTES
+// =========================
+
+// GET /user-dashboard – Recent Bookings
+app.get('/user-dashboard', requireRole('user'), async (req, res) => {
+  try {
+    const userId = req.session.user.id;
+    const [bookings] = await db.query(
+      `SELECT b.*, ps.location, ps.address AS parking_address, ps.title AS parking_name
+       FROM bookings b
+       JOIN parking_spaces ps ON b.parking_space_id = ps.id
+       WHERE b.user_id = ?
+       ORDER BY b.id DESC`,
+      [userId]
+    );
+    res.render('user_dashboard_bookings', { bookings });
+  } catch (err) {
+    console.error(err);
+    res.render('user_dashboard_bookings', { bookings: [] });
+  }
+});
+
+// Search parking (use parking_spaces table)
+app.get('/user/search', requireRole('user'), async (req, res) => {
+  try {
+    const { location, vehicle_type, sort } = req.query;
+    let sql = `
+      SELECT ps.*, u.name AS owner_name
+      FROM parking_spaces ps
+      JOIN users u ON ps.owner_id = u.id
+      WHERE (ps.available_slots IS NULL OR ps.available_slots > 0) AND 1=1
+    `;
+    const params = [];
+
+    if (vehicle_type) {
+      sql += ' AND (ps.vehicle_type = ? OR ps.vehicle_type = "both")';
+      params.push(vehicle_type);
+    }
+    if (location) {
+      const like = `%${location}%`;
+      sql += ' AND (ps.address LIKE ? OR ps.location LIKE ? OR ps.location_description LIKE ?)';
+      params.push(like, like, like);
+    }
+    if (sort === 'price') sql += ' ORDER BY ps.price_per_hour ASC';
+    else if (sort === 'availability') sql += ' ORDER BY COALESCE(ps.available_slots, 0) DESC';
+    else sql += ' ORDER BY ps.id DESC';
+
+    const [rows] = await db.query(sql, params);
+    res.render('user_dashboard', {
+      query: req.query,
+      spaces: rows,
+      hasUserLocation: !!(req.query.user_lat && req.query.user_lng),
+      nearbyCount: rows.length,
+    });
+  } catch (err) {
+    console.error(err);
+    res.render('user_dashboard', {
+      query: req.query,
+      spaces: [],
+      hasUserLocation: false,
+      nearbyCount: 0,
+    });
+  }
+});
+
+// Chatbot: get available locations
+app.get('/chatbot/get-locations', requireRole('user'), async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT id, title, address, location, location_description, price_per_hour,
+              total_slots, available_slots
+       FROM parking_spaces
+       WHERE (available_slots IS NULL OR available_slots > 0)`
+    );
+    res.json({ locations: rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not fetch locations' });
+  }
+});
+
+// Chatbot: check availability for requested time
+app.post('/chatbot/check-availability', requireRole('user'), async (req, res) => {
+  try {
+    const { spaceId, start_time, duration_minutes } = req.body;
+    const duration = Math.max(30, parseInt(duration_minutes, 10) || 60);
+    const start = new Date(start_time);
+    if (Number.isNaN(start.getTime())) {
+      return res.status(400).json({ available: false, message: 'Invalid start time' });
+    }
+    const end = new Date(start.getTime() + duration * 60000);
+
+    const [[space]] = await db.query(
+      'SELECT id, title, address, price_per_hour, available_slots FROM parking_spaces WHERE id = ?',
+      [spaceId]
+    );
+    if (!space) return res.json({ available: false, message: 'Space not found' });
+    if ((space.available_slots || 0) <= 0) {
+      return res.json({ available: false, message: 'No slots available' });
+    }
+
+    const hours = Math.max(0.5, duration / 60);
+    const amount = (Number(space.price_per_hour) || 0) * hours;
+
+    res.json({
+      available: true,
+      space,
+      amount,
+      start_time: start.toISOString(),
+      end_time: end.toISOString(),
+      human_start: start.toLocaleString(),
+      human_duration: `${hours.toFixed(1)} hour(s)`,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ available: false, message: 'Error checking availability' });
+  }
+});
+
+// Chatbot: book slot (JSON flow)
+app.post('/chatbot/book-slot', requireRole('user'), async (req, res) => {
+  try {
+    const userId = req.session.user.id;
+    const { spaceId, start_time, end_time, duration_minutes, vehicle_number } = req.body;
+
+    const start = new Date(start_time);
+    const end = new Date(end_time);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
+      return res.status(400).json({ success: false, message: 'Invalid time range' });
+    }
+
+    const [[parking]] = await db.query(
+      'SELECT owner_id, price_per_hour, available_slots, title, address FROM parking_spaces WHERE id = ?',
+      [spaceId]
+    );
+    if (!parking) return res.json({ success: false, message: 'Parking not found' });
+    if ((parking.available_slots || 0) <= 0) {
+      return res.json({ success: false, message: 'No slots available' });
+    }
+
+    const durationHrs = Math.max(0.5, (end - start) / 3600000);
+    const amount = (Number(parking.price_per_hour) || 0) * durationHrs;
+    const commission = Math.round(amount * COMMISSION_RATE * 100) / 100;
+    const clientAmount = Math.round((amount - commission) * 100) / 100;
+    const clientId = parking.owner_id;
+
+    const bookingDate = start.toISOString().split('T')[0];
+    const startTimeStr = start.toTimeString().slice(0, 8);
+    const endTimeStr = end.toTimeString().slice(0, 8);
+    // Store MySQL-friendly DATETIME (YYYY-MM-DD HH:MM:SS)
+    const bookingTime = `${bookingDate} ${startTimeStr}`;
+
+    const conn = await db.getConnection();
+    let bookingRow;
+    try {
+      await conn.beginTransaction();
+      const [ins] = await conn.query(
+        `INSERT INTO bookings (user_id, parking_space_id, client_id, booking_date, start_time, end_time,
+                               booking_time, vehicle_number, amount, commission, client_amount, status, booking_status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', 'Active')`,
+        [
+          userId,
+          spaceId,
+          clientId,
+          bookingDate,
+          startTimeStr,
+          endTimeStr,
+          bookingTime,
+          vehicle_number || null,
+          amount,
+          commission,
+          clientAmount,
+        ]
+      );
+
+      const [ur] = await conn.query(
+        'UPDATE client SET total_earnings = COALESCE(total_earnings, 0) + ? WHERE user_id = ?',
+        [clientAmount, clientId]
+      );
+      if (!ur || ur.affectedRows === 0) {
+        await conn.query(
+          'UPDATE client SET total_earnings = COALESCE(total_earnings, 0) + ? WHERE id = ?',
+          [clientAmount, clientId]
+        );
+      }
+
+      await conn.query(
+        'UPDATE parking_spaces SET available_slots = ? WHERE id = ?',
+        [Math.max(0, (parking.available_slots || 1) - 1), spaceId]
+      );
+
+      await conn.commit();
+      bookingRow = { id: ins.insertId, amount, commission, client_amount: clientAmount };
+    } catch (txErr) {
+      await conn.rollback();
+      throw txErr;
+    } finally {
+      conn.release();
+    }
+
+    res.json({ success: true, booking: bookingRow });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: 'Could not complete booking' });
+  }
+});
+
+// Chatbot: generate booking receipt (HTML, printable as PDF)
+app.get('/chatbot/generate-receipt', requireRole('user'), async (req, res) => {
+  try {
+    const userId = req.session.user.id;
+    const bookingId = parseInt(req.query.bookingId, 10);
+    if (!bookingId) return res.status(400).json({ error: 'Invalid booking ID' });
+
+    const [[b]] = await db.query(
+      `SELECT b.*, ps.title AS parking_name, ps.address AS parking_address
+       FROM bookings b
+       JOIN parking_spaces ps ON b.parking_space_id = ps.id
+       WHERE b.id = ? AND b.user_id = ?`,
+      [bookingId, userId]
+    );
+    if (!b) return res.status(404).json({ error: 'Booking not found' });
+
+    const startStr = b.booking_date && b.start_time
+      ? `${b.booking_date} ${String(b.start_time).slice(0, 8)}`
+      : b.booking_time || b.created_at;
+    const start = safeDate(startStr);
+    const created = safeDate(b.created_at || b.booking_time || startStr);
+
+    const html = `
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Booking Receipt #${b.id}</title>
+    <style>
+      body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 24px; }
+      h1 { margin-bottom: 4px; }
+      h2 { margin-top: 24px; margin-bottom: 8px; }
+      .card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px 14px; max-width: 480px; }
+      .row { margin: 4px 0; }
+      .label { color: #6b7280; font-size: 0.85rem; }
+      .value { font-size: 0.92rem; }
+      hr { margin: 16px 0; border: none; border-top: 1px solid #e5e7eb; }
+      button { margin-top: 12px; padding: 6px 12px; border-radius: 999px; border: 1px solid #111827; background: #111827; color: #fff; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <h1>Booking Receipt</h1>
+    <div class="card">
+      <div class="row"><span class="label">Booking ID</span><br/><span class="value">#${b.id}</span></div>
+      <div class="row"><span class="label">Parking Location</span><br/><span class="value">${b.parking_name || ''}, ${b.parking_address || ''}</span></div>
+      <div class="row"><span class="label">Vehicle Number</span><br/><span class="value">${b.vehicle_number || '-'}</span></div>
+      <div class="row"><span class="label">Start Time</span><br/><span class="value">${start ? start.toLocaleString() : '-'}</span></div>
+      <div class="row"><span class="label">Duration</span><br/><span class="value">${b.duration || ''} hour(s)</span></div>
+      <div class="row"><span class="label">Amount Paid</span><br/><span class="value">₹${(Number(b.amount) || 0).toFixed(2)}</span></div>
+      <div class="row"><span class="label">Date</span><br/><span class="value">${created ? created.toLocaleString() : '-'}</span></div>
+    </div>
+    <button onclick="window.print()">Download / Print as PDF</button>
+  </body>
+</html>`;
+
+    res.json({ html });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Could not generate receipt' });
+  }
+});
+
+app.get('/find-parking', requireRole('client'), (req, res) => res.redirect('/client-dashboard'));
+app.get('/dashboard', requireRole('user'), (req, res) => res.redirect('/user-dashboard'));
+
+// Legacy redirects
+app.get('/user/dashboard', requireRole('user'), (req, res) => res.redirect('/dashboard'));
+app.get('/client/dashboard', requireRole('client'), (req, res) => res.redirect('/client-dashboard'));
+
+// Book form (GET)
+app.get('/user/book/:id', requireRole('user'), async (req, res) => {
+  try {
+    const [rows] = await db.query(
+      `SELECT ps.*, u.name AS owner_name FROM parking_spaces ps JOIN users u ON ps.owner_id = u.id WHERE ps.id = ?`,
+      [req.params.id]
+    );
+    if (rows.length === 0) return res.status(404).send('Parking space not found');
+    const space = rows[0];
+    space.location_description = space.location_description || space.location;
+    res.render('booking_new', { space, error: null });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Error loading parking space');
+  }
+});
+
+// POST /book-slot/:id – Transaction: insert booking (with commission), update client earnings, update slots
+const COMMISSION_RATE = 0.1;
+
+app.post('/book-slot/:id', requireRole('user'), async (req, res) => {
+  try {
+    const parkingSpaceId = parseInt(req.params.id, 10);
+    const userId = req.session.user.id;
+    const { start_time, end_time, vehicle_number } = req.body;
+
+    if (!start_time || !end_time) {
+      const [rows] = await db.query(
+        `SELECT ps.*, u.name AS owner_name FROM parking_spaces ps JOIN users u ON ps.owner_id = u.id WHERE ps.id = ?`,
+        [parkingSpaceId]
+      );
+      if (rows.length === 0) return res.status(404).send('Parking not found');
+      const space = rows[0];
+      space.location_description = space.location_description || space.location;
+      return res.render('booking_new', {
+        space,
+        error: 'Please provide start and end time.',
       });
     }
-  );
-});
 
-app.get('/user/search', requireAuth, requireRole('user'), (req, res) => {
-  const { location, vehicle_type, user_lat, user_lng, sort } = req.query;
+    const start = new Date(start_time);
+    const end = new Date(end_time);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+      try {
+        const [rows] = await db.query(
+          `SELECT ps.*, u.name AS owner_name FROM parking_spaces ps JOIN users u ON ps.owner_id = u.id WHERE ps.id = ?`,
+          [parkingSpaceId]
+        );
+        const space = rows[0] ? { ...rows[0], location_description: rows[0].location_description || rows[0].location } : null;
+        return res.render('booking_new', {
+          space: space || { id: parkingSpaceId, title: '', address: '', owner_name: '', vehicle_type: '', available_from: '', available_to: '', price_per_hour: '' },
+          error: 'Invalid date or time. Please provide valid start and end datetime.',
+        });
+      } catch (e) {
+        return res.status(400).send('Invalid date or time. Please try again.');
+      }
+    }
+    if (end <= start) {
+      try {
+        const [rows] = await db.query(
+          `SELECT ps.*, u.name AS owner_name FROM parking_spaces ps JOIN users u ON ps.owner_id = u.id WHERE ps.id = ?`,
+          [parkingSpaceId]
+        );
+        const space = rows[0] ? { ...rows[0], location_description: rows[0].location_description || rows[0].location } : null;
+        return res.render('booking_new', {
+          space: space || { id: parkingSpaceId, title: '', address: '', owner_name: '', vehicle_type: '', available_from: '', available_to: '', price_per_hour: '' },
+          error: 'End time must be after start time.',
+        });
+      } catch (e) {
+        return res.status(400).send('End time must be after start time.');
+      }
+    }
+    const durationHrs = Math.max(1, Math.ceil((end - start) / (1000 * 60 * 60)));
+    const bookingDate = start.toISOString().split('T')[0];
+    const startTimeStr = start.toTimeString().slice(0, 8);
+    const endTimeStr = end.toTimeString().slice(0, 8);
+    const bookingTime = start_time;
 
-  const hasCoords =
-    user_lat && user_lng && !Number.isNaN(Number(user_lat)) && !Number.isNaN(Number(user_lng));
-
-  let sql =
-    'SELECT ps.*, u.name as owner_name FROM parking_spaces ps JOIN users u ON ps.owner_id = u.id WHERE 1=1';
-  const params = [];
-
-  // When we have GPS coordinates, skip text-based location filtering
-  // so all spaces are returned and sorted by real distance instead
-  if (location && !hasCoords) {
-    sql += ' AND (ps.address LIKE ? OR ps.location_description LIKE ?)';
-    params.push(`%${location}%`, `%${location}%`);
-  }
-
-  if (vehicle_type) {
-    sql += ' AND (ps.vehicle_type = ? OR ps.vehicle_type = ?)';
-    params.push(vehicle_type, 'both');
-  }
-
-  db.all(sql, params, (err, spaces) => {
-    if (err) return res.status(500).send('Error searching parking spaces.');
-
-    let nearbyCount = null;
-
-    if (hasCoords) {
-      attachDistances(spaces, Number(user_lat), Number(user_lng));
-      nearbyCount = spaces.filter(
-        (s) => typeof s.distance_km === 'number' && s.distance_km <= 10
-      ).length;
+    const [[parking]] = await db.query(
+      'SELECT owner_id, price_per_hour, available_slots, title, address FROM parking_spaces WHERE id = ?',
+      [parkingSpaceId]
+    );
+    if (!parking) return res.status(404).send('Parking not found');
+    const availSlots = Number(parking.available_slots) ?? 1;
+    if (availSlots <= 0) {
+      try {
+        const [rows] = await db.query(
+          `SELECT ps.*, u.name AS owner_name FROM parking_spaces ps JOIN users u ON ps.owner_id = u.id WHERE ps.id = ?`,
+          [parkingSpaceId]
+        );
+        const space = rows[0] ? { ...rows[0], location_description: rows[0].location_description || rows[0].location } : null;
+        return res.render('booking_new', {
+          space: space || { id: parkingSpaceId, title: parking.title, address: parking.address, owner_name: '', vehicle_type: '', available_from: '', available_to: '', price_per_hour: parking.price_per_hour },
+          error: 'No slots available for this parking space.',
+        });
+      } catch (e) {
+        return res.status(400).send('No slots available.');
+      }
     }
 
-    sortSpaces(spaces, sort || 'distance');
+    const amount = (Number(parking.price_per_hour) || 0) * durationHrs;
+    const commission = Math.round(amount * COMMISSION_RATE * 100) / 100;
+    const clientAmount = Math.round((amount - commission) * 100) / 100;
+    const clientId = parking.owner_id;
 
-    res.render('user_dashboard', {
-      spaces,
-      query: {
-        location: location || '',
-        vehicle_type: vehicle_type || '',
-        sort: sort || 'distance',
-      },
-      nearbyCount,
-      hasUserLocation: !!hasCoords,
-    });
+    const conn = await db.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      await conn.query(
+        `INSERT INTO bookings (user_id, parking_space_id, client_id, booking_date, start_time, end_time, booking_time, vehicle_number, amount, commission, client_amount, status, booking_status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', 'Active')`,
+        [userId, parkingSpaceId, clientId, bookingDate, startTimeStr, endTimeStr, bookingTime, vehicle_number || null, amount, commission, clientAmount]
+      );
+
+      const [ur] = await conn.query(
+        `UPDATE client SET total_earnings = COALESCE(total_earnings, 0) + ? WHERE user_id = ?`,
+        [clientAmount, clientId]
+      );
+      if (ur && ur.affectedRows === 0) {
+        await conn.query(
+          `UPDATE client SET total_earnings = COALESCE(total_earnings, 0) + ? WHERE id = ?`,
+          [clientAmount, clientId]
+        );
+      }
+
+      await conn.query(
+        'UPDATE parking_spaces SET available_slots = ? WHERE id = ?',
+        [Math.max(0, (parking.available_slots || 1) - 1), parkingSpaceId]
+      );
+
+      await conn.commit();
+    } catch (txErr) {
+      await conn.rollback();
+      throw txErr;
+    } finally {
+      conn.release();
+    }
+
+    req.session.bookingConfirm = {
+      clientAmount,
+      commission,
+      amount,
+      commissionPercent: COMMISSION_RATE * 100,
+    };
+    res.redirect('/booking-confirmed');
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Could not complete booking. Please try again.');
+  }
+});
+
+// GET /booking-confirmed – after successful booking
+app.get('/booking-confirmed', requireRole('user'), (req, res) => {
+  const data = req.session.bookingConfirm || {
+    clientAmount: 0,
+    commission: 0,
+    amount: 0,
+    commissionPercent: 10,
+  };
+  delete req.session.bookingConfirm;
+  res.render('booking_confirm', {
+    clientAmount: data.clientAmount,
+    commission: data.commission,
+    amount: data.amount,
+    commissionPercent: data.commissionPercent,
+    message: `₹${data.clientAmount} credited to client after ${data.commissionPercent}% commission deduction.`,
   });
 });
 
-app.get('/user/book/:id', requireAuth, requireRole('user'), (req, res) => {
-  db.get(
-    'SELECT ps.*, u.name as owner_name, u.email as owner_email FROM parking_spaces ps JOIN users u ON ps.owner_id = u.id WHERE ps.id = ?',
-    [req.params.id],
-    (err, space) => {
-      if (err || !space) return res.status(404).send('Parking space not found.');
-      res.render('booking_new', { space, error: null, commissionRate: COMMISSION_RATE });
-    }
-  );
-});
-
-app.post('/user/book/:id', requireAuth, requireRole('user'), (req, res) => {
-  const id = req.params.id;
-  const { start_time, end_time } = req.body;
-
-  if (!start_time || !end_time) {
-    return db.get(
-      'SELECT ps.*, u.name as owner_name, u.email as owner_email FROM parking_spaces ps JOIN users u ON ps.owner_id = u.id WHERE ps.id = ?',
-      [id],
-      (err, space) => {
-        if (err || !space) return res.status(404).send('Parking space not found.');
-        res.render('booking_new', { space, error: 'Please enter start and end time.', commissionRate: COMMISSION_RATE });
-      }
+// GET /my-earnings – client earnings page (join booking + parking_spaces + client)
+app.get('/my-earnings', requireRole('client'), async (req, res) => {
+  try {
+    const ownerId = req.session.user.id;
+    const [[clientRow]] = await db.query(
+      'SELECT COALESCE(total_earnings, total_earned, 0) AS total_earnings FROM client WHERE user_id = ? OR id = ? LIMIT 1',
+      [ownerId, ownerId]
     );
+    const totalEarnings = clientRow ? Number(clientRow.total_earnings || 0) : 0;
+
+    const [bookings] = await db.query(
+      `SELECT b.id, b.amount, b.commission, b.client_amount, b.booking_time, b.booking_date, b.start_time, b.created_at, b.booking_status, ps.title AS parking_name
+       FROM bookings b
+       JOIN parking_spaces ps ON b.parking_space_id = ps.id
+       WHERE ps.owner_id = ? AND (b.booking_status IS NULL OR b.booking_status != 'Cancelled')
+       ORDER BY COALESCE(b.booking_time, b.created_at) DESC`,
+      [ownerId]
+    );
+
+    const totalCommission = bookings.reduce((s, b) => s + (Number(b.commission) || 0), 0);
+    const netEarnings = bookings.reduce((s, b) => s + (Number(b.client_amount) || 0), 0);
+
+    res.render('my_earnings', {
+      totalEarnings,
+      totalCommission,
+      netEarnings,
+      totalBookings: bookings.length,
+      bookings,
+    });
+  } catch (err) {
+    console.error(err);
+    res.render('my_earnings', { totalEarnings: 0, totalCommission: 0, netEarnings: 0, totalBookings: 0, bookings: [] });
   }
-
-  db.get(
-    'SELECT ps.*, u.name as owner_name FROM parking_spaces ps JOIN users u ON ps.owner_id = u.id WHERE ps.id = ?',
-    [id],
-    (err, space) => {
-      if (err || !space) return res.status(404).send('Parking space not found.');
-
-      const start = new Date(start_time);
-      const end = new Date(end_time);
-      if (isNaN(start.getTime()) || isNaN(end.getTime()) || end <= start) {
-        return res.status(400).send('Invalid start or end time.');
-      }
-
-      const hours = Math.ceil((end - start) / (1000 * 60 * 60));
-      const totalAmount = hours * space.price_per_hour;
-      const platformCommission = Math.round(totalAmount * COMMISSION_RATE * 100) / 100;
-      const ownerEarnings = Math.round((totalAmount - platformCommission) * 100) / 100;
-      const bookingDate = start.toISOString().slice(0, 10);
-
-      const stmt = db.prepare(
-        `INSERT INTO bookings (
-          user_id, parking_space_id, parking_id, vehicle_type, booking_date,
-          start_time, end_time, total_price, total_amount,
-          platform_commission, owner_earnings,
-          payment_status, booking_status,
-          refund_amount, refund_status, refund_date
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-      );
-
-      stmt.run(
-        req.session.user.id, space.id, space.id, space.vehicle_type, bookingDate,
-        start.toISOString(), end.toISOString(), totalAmount, totalAmount,
-        platformCommission, ownerEarnings,
-        'Paid', 'Active', null, null, null,
-        function (err2) {
-          if (err2) return res.status(500).send('Could not create booking. Please try again.');
-
-          // Credit owner's pending payout
-          db.run(
-            `UPDATE users SET
-              pending_payout = COALESCE(pending_payout, 0) + ?,
-              total_earnings = COALESCE(total_earnings, 0) + ?,
-              total_bookings = COALESCE(total_bookings, 0) + 1
-            WHERE id = ?`,
-            [ownerEarnings, ownerEarnings, space.owner_id]
-          );
-
-          const bookingId = this.lastID;
-          const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(space.address)}`;
-
-          res.render('booking_confirm', {
-            booking: {
-              id: bookingId,
-              start_time: start.toLocaleString(),
-              end_time: end.toLocaleString(),
-              total_price: totalAmount.toFixed(2),
-              platform_commission: platformCommission.toFixed(2),
-              owner_earnings: ownerEarnings.toFixed(2),
-            },
-            space,
-            mapsUrl,
-          });
-        }
-      );
-    }
-  );
 });
 
-app.get('/user/bookings', requireAuth, requireRole('user'), (req, res) => {
-  const statusFilter = req.query.status || 'all';
-  const params = [req.session.user.id];
-  let whereStatus = '';
-  if (['Active', 'Completed', 'Cancelled'].includes(statusFilter)) {
-    whereStatus = ' AND b.booking_status = ?';
-    params.push(statusFilter);
+// POST /user/bookings/:id/cancel – Cancel booking, revert slot, deduct from client earnings
+app.post('/user/bookings/:id/cancel', requireRole('user'), async (req, res) => {
+  try {
+    const bookingId = parseInt(req.params.id, 10);
+    const userId = req.session.user.id;
+
+    const [[booking]] = await db.query(
+      `SELECT b.*, ps.owner_id, ps.available_slots FROM bookings b
+       JOIN parking_spaces ps ON b.parking_space_id = ps.id
+       WHERE b.id = ? AND b.user_id = ? AND (b.booking_status = 'Active' OR b.booking_status IS NULL)`,
+      [bookingId, userId]
+    );
+    if (!booking) {
+      return res.status(404).send('Booking not found or cannot be cancelled.');
+    }
+
+    const clientAmount = Number(booking.client_amount) || 0;
+    const clientId = booking.client_id || booking.owner_id;
+    const conn = await db.getConnection();
+    try {
+      await conn.beginTransaction();
+      await conn.query(
+        "UPDATE bookings SET booking_status = 'Cancelled' WHERE id = ?",
+        [bookingId]
+      );
+      await conn.query(
+        'UPDATE parking_spaces SET available_slots = COALESCE(available_slots, 0) + 1 WHERE id = ?',
+        [booking.parking_space_id]
+      );
+      if (clientAmount > 0 && clientId) {
+        const [ur] = await conn.query(
+          'UPDATE client SET total_earnings = GREATEST(0, COALESCE(total_earnings, 0) - ?) WHERE user_id = ?',
+          [clientAmount, clientId]
+        );
+        if (ur.affectedRows === 0) {
+          await conn.query(
+            'UPDATE client SET total_earnings = GREATEST(0, COALESCE(total_earnings, 0) - ?) WHERE id = ?',
+            [clientAmount, clientId]
+          );
+        }
+      }
+      await conn.commit();
+    } catch (txErr) {
+      await conn.rollback();
+      throw txErr;
+    } finally {
+      conn.release();
+    }
+    res.redirect('/user/bookings');
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Could not cancel booking.');
   }
-
-  db.all(
-    `SELECT b.*, ps.title as parking_name, ps.address as parking_address, ps.vehicle_type as space_vehicle_type
-     FROM bookings b
-     JOIN parking_spaces ps ON b.parking_space_id = ps.id
-     WHERE b.user_id = ?${whereStatus}
-     ORDER BY b.created_at DESC`,
-    params,
-    (err, bookings) => {
-      if (err) return res.status(500).send('Error loading bookings.');
-      res.render('my_bookings', { bookings, statusFilter });
-    }
-  );
 });
 
-app.post('/user/bookings/:id/cancel', requireAuth, requireRole('user'), (req, res) => {
-  const bookingId = req.params.id;
-
-  db.get(
-    `SELECT b.*, ps.title as parking_name, ps.address as parking_address,
-            ps.total_slots, ps.available_slots, ps.owner_id
-     FROM bookings b
-     JOIN parking_spaces ps ON b.parking_space_id = ps.id
-     WHERE b.id = ? AND b.user_id = ?`,
-    [bookingId, req.session.user.id],
-    (err, booking) => {
-      if (err || !booking) return res.status(404).send('Booking not found.');
-      if (booking.booking_status && booking.booking_status !== 'Active') {
-        return res.status(400).send('This booking cannot be cancelled.');
-      }
-
-      const now = new Date();
-      const start = new Date(booking.start_time);
-      if (isNaN(start.getTime())) return res.status(400).send('Invalid booking start time.');
-      if (now >= start) return res.status(400).send('Cannot cancel after start time.');
-
-      const hoursBeforeStart = (start - now) / (1000 * 60 * 60);
-      const baseAmount = booking.total_amount || booking.total_price || 0;
-      let refundAmount = 0;
-      if (hoursBeforeStart > 2) refundAmount = baseAmount;
-      else if (hoursBeforeStart > 0) refundAmount = baseAmount * 0.5;
-
-      const refundDate = new Date().toISOString();
-      const paymentStatus = refundAmount > 0 ? 'Refunded' : booking.payment_status || 'Paid';
-      const ownerEarnings = booking.owner_earnings || 0;
-
-      db.run(
-        `UPDATE bookings SET booking_status = 'Cancelled', refund_amount = ?, refund_status = 'Processed', refund_date = ?, payment_status = ? WHERE id = ?`,
-        [refundAmount, refundDate, paymentStatus, bookingId],
-        (err2) => {
-          if (err2) return res.status(500).send('Error cancelling booking.');
-
-          db.run(
-            `UPDATE parking_spaces SET available_slots = MIN(total_slots, COALESCE(available_slots, total_slots) + 1) WHERE id = ?`,
-            [booking.parking_space_id]
-          );
-
-          // Reverse owner's pending payout
-          db.run(
-            `UPDATE users SET
-              pending_payout = MAX(0, COALESCE(pending_payout, 0) - ?),
-              total_earnings = MAX(0, COALESCE(total_earnings, 0) - ?)
-            WHERE id = ?`,
-            [ownerEarnings, ownerEarnings, booking.owner_id]
-          );
-
-          res.redirect('/user/bookings?status=Cancelled');
-        }
-      );
+// User bookings list (compatible with existing my_bookings view)
+app.get('/user/bookings', requireRole('user'), async (req, res) => {
+  try {
+    const userId = req.session.user.id;
+    const statusFilter = req.query.status || 'all';
+    let sql = `
+      SELECT b.*, ps.title AS parking_name, ps.address AS parking_address
+      FROM bookings b
+      JOIN parking_spaces ps ON b.parking_space_id = ps.id
+      WHERE b.user_id = ?
+    `;
+    const params = [userId];
+    if (['Active', 'Completed', 'Cancelled'].includes(statusFilter)) {
+      sql += ' AND b.booking_status = ?';
+      params.push(statusFilter);
     }
-  );
+    sql += ' ORDER BY b.id DESC';
+
+    const [rows] = await db.query(sql, params);
+    const bookings = rows.map((b) => {
+      const startStr = b.booking_date && b.start_time
+        ? `${b.booking_date}T${String(b.start_time).slice(0, 8)}`
+        : b.created_at;
+      const endStr = b.booking_date && b.end_time
+        ? `${b.booking_date}T${String(b.end_time).slice(0, 8)}`
+        : null;
+      const startDate = safeDate(startStr);
+      const endDate = endStr ? safeDate(endStr) : (startDate ? new Date(startDate.getTime() + 3600000) : null);
+      return {
+        ...b,
+        start_time: safeDateISO(startStr) || (startDate ? startDate.toISOString() : null),
+        end_time: safeDateISO(endStr) || (endDate ? endDate.toISOString() : null),
+        booking_status: b.booking_status || b.status || 'Active',
+        total_amount: b.amount,
+      };
+    });
+    res.render('my_bookings', { bookings, statusFilter: statusFilter === 'all' ? 'all' : statusFilter });
+  } catch (err) {
+    console.error(err);
+    res.render('my_bookings', { bookings: [], statusFilter: 'all' });
+  }
 });
 
+// =========================
+// SERVER START
+// =========================
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
+  console.log(`🚀 Server running at http://localhost:${PORT}`);
 });

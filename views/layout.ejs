@@ -25,10 +25,12 @@
           <% } else { %>
           <span class="welcome">Hi, <%= currentUser.name %> • <%= currentUser.role === 'client' ? 'Owner' : 'User' %></span>
           <% if (currentUser.role === 'client') { %>
-          <a href="/client/dashboard" class="nav-link">Owner Dashboard</a>
+          <a href="/client-dashboard" class="nav-link">Dashboard</a>
+          <a href="/my-parkings" class="nav-link">My Parkings</a>
+          <a href="/my-earnings" class="nav-link">My Earnings</a>
           <% } else { %>
-          <a href="/user/dashboard" class="nav-link">Find Parking</a>
-          <a href="/user/bookings" class="nav-link">My Bookings</a>
+          <a href="/user/search" class="nav-link">Find Parking</a>
+          <a href="/dashboard" class="nav-link">My Bookings</a>
           <% } %>
           <form action="/logout" method="post" class="inline-form">
             <button type="submit" class="btn nav-logout">Logout</button>

@@ -1,0 +1,63 @@
+<section class="page-section">
+  <header class="section-header">
+    <div>
+      <p class="section-eyebrow">Dashboard</p>
+      <h1>Recent Bookings</h1>
+    </div>
+    <div class="owner-header-actions">
+      <a href="/user/search" class="btn primary btn-compact">Find Parking</a>
+      <a href="/user/bookings" class="btn ghost btn-compact">All Bookings</a>
+    </div>
+  </header>
+
+  <% if (!bookings || bookings.length === 0) { %>
+  <div class="bookings-empty">
+    <h2>No bookings yet</h2>
+    <p class="muted">When you book a parking space, it will show up here.</p>
+    <a href="/user/search" class="btn primary">Find Parking</a>
+  </div>
+  <% } else { %>
+  <div class="bookings-grid">
+    <% bookings.forEach((b) => { %>
+    <% const total = typeof b.amount === 'number' ? b.amount : parseFloat(b.amount) || 0; %>
+    <article class="booking-card">
+      <header class="booking-card-header">
+        <div>
+          <p class="booking-id">Booking #<%= b.id %></p>
+          <h2 class="booking-title"><%= b.parking_name || 'Parking' %></h2>
+          <p class="booking-address"><%= b.parking_address || b.location || '—' %></p>
+        </div>
+        <span class="badge booking-badge booking-badge-status"><%= b.booking_status || b.status || 'Active' %></span>
+      </header>
+      <div class="booking-body">
+        <dl class="booking-meta">
+          <div>
+            <dt>Date</dt>
+            <dd><%= b.booking_date || '—' %></dd>
+          </div>
+          <div>
+            <dt>Time</dt>
+            <dd><%= b.start_time ? String(b.start_time).slice(0, 5) : '—' %> – <%= b.end_time ? String(b.end_time).slice(0, 5) : '—' %></dd>
+          </div>
+          <div>
+            <dt>Total paid</dt>
+            <dd>₹<%= total.toFixed(2) %></dd>
+          </div>
+        </dl>
+      </div>
+      <% if (b.parking_address) { %>
+      <footer class="booking-card-footer">
+        <a
+          href="https://www.google.com/maps/dir/?api=1&destination=<%= encodeURIComponent(b.parking_address) %>"
+          target="_blank"
+          class="btn ghost btn-compact"
+        >
+          Directions
+        </a>
+      </footer>
+      <% } %>
+    </article>
+    <% }) %>
+  </div>
+  <% } %>
+</section>

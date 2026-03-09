@@ -2,7 +2,7 @@
   "name": "parking-middleman-app",
   "version": "1.0.0",
   "engines": {
-    "node": "18.x" 
+    "node": "18.x"
   },
   "description": "Simple parking space middleman app with owners (clients) and renters (users).",
   "main": "server.js",
@@ -20,11 +20,12 @@
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "body-parser": "^1.20.3",
+    "dotenv": "^17.3.1",
     "ejs": "^3.1.10",
     "express": "^4.21.1",
     "express-ejs-layouts": "^2.5.1",
     "express-session": "^1.18.1",
-    "sqlite3": "^5.0.2"
+    "mysql2": "^3.11.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.9"

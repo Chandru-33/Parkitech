@@ -3,25 +3,16 @@
 
   <div class="card">
     <h2>Payment receipt</h2>
-    <p><strong>Booking ID:</strong> <%= booking.id %></p>
-    <p><strong>Parking space:</strong> <%= space.title %></p>
-    <p><strong>Address:</strong> <%= space.address %></p>
-    <p><strong>Start:</strong> <%= booking.start_time %></p>
-    <p><strong>End:</strong> <%= booking.end_time %></p>
-    <p><strong>Total amount:</strong> ₹<%= booking.total_price %></p>
+    <% if (typeof message !== 'undefined' && message) { %>
+    <div class="alert" style="background: #e8f5e9; border-color: #4caf50; margin-bottom: 1rem;">
+      <%= message %>
+    </div>
+    <% } %>
+    <p><strong>Total paid:</strong> ₹<%= (amount || 0).toFixed(2) %></p>
+    <p><strong>Platform commission (<%= (commissionPercent || 10) %>%):</strong> ₹<%= (commission || 0).toFixed(2) %></p>
+    <p><strong>Credited to client:</strong> ₹<%= (clientAmount || 0).toFixed(2) %></p>
   </div>
 
-  <div class="card">
-    <h2>Google Maps directions</h2>
-    <p>
-      Click the button below to open Google Maps with directions from your current location to the booked parking slot location.
-    </p>
-    <a href="<%= mapsUrl %>" target="_blank" class="btn primary">
-      Open in Google Maps
-    </a>
-  </div>
-
-  <button class="btn ghost" onclick="window.print()">Print receipt</button>
-  <a href="/user/dashboard" class="btn ghost">Back to search</a>
+  <a href="/dashboard" class="btn primary">Back to Dashboard</a>
+  <a href="/user/search" class="btn ghost">Find more parking</a>
 </section>
-

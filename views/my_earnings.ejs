@@ -1,0 +1,72 @@
+<section class="page-section">
+  <header class="section-header">
+    <div>
+      <p class="section-eyebrow">Earnings</p>
+      <h1>My Earnings</h1>
+    </div>
+    <div class="owner-header-actions">
+      <a href="/client-dashboard" class="btn ghost btn-compact">Dashboard</a>
+      <a href="/my-parkings" class="btn ghost btn-compact">My Parkings</a>
+    </div>
+  </header>
+
+  <div class="stats-grid" style="margin-bottom: 2rem;">
+    <article class="stat-card">
+      <p class="stat-label">Total Earnings (Net)</p>
+      <p class="stat-value">₹<%= (totalEarnings || netEarnings || 0).toFixed(2) %></p>
+      <p class="stat-note">After 10% commission</p>
+    </article>
+    <article class="stat-card">
+      <p class="stat-label">Commission Deducted</p>
+      <p class="stat-value" style="color: #666;">₹<%= (totalCommission || 0).toFixed(2) %></p>
+      <p class="stat-note">10% platform fee</p>
+    </article>
+    <article class="stat-card">
+      <p class="stat-label">Total Bookings</p>
+      <p class="stat-value"><%= totalBookings || 0 %></p>
+      <p class="stat-note">Active (excl. cancelled)</p>
+    </article>
+  </div>
+
+  <section class="owner-section">
+    <header class="owner-section-header">
+      <h2>Recent Bookings</h2>
+      <p class="muted"><%= bookings.length %> booking(s)</p>
+    </header>
+
+    <% if (!bookings || bookings.length === 0) { %>
+    <div class="bookings-empty">
+      <h3>No bookings yet</h3>
+      <p class="muted">When users book your spaces, earnings will appear here.</p>
+    </div>
+    <% } else { %>
+    <div class="table-wrapper">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Date / Time</th>
+            <th>Parking</th>
+            <th>Amount (₹)</th>
+            <th>Commission (₹)</th>
+            <th>Net (₹)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% bookings.forEach((b) => { %>
+          <% const dt = b.booking_time || b.booking_date || b.created_at; %>
+          <% const dtObj = dt ? new Date(dt) : null; %>
+          <% const dtValid = dtObj && !Number.isNaN(dtObj.getTime()); %>
+          <tr>
+            <td><%= dtValid ? dtObj.toLocaleString() : (dt || '—') %></td>
+            <td><%= b.parking_name || '—' %></td>
+            <td>₹<%= (Number(b.amount) || 0).toFixed(2) %></td>
+            <td class="text-muted">₹<%= (Number(b.commission) || 0).toFixed(2) %></td>
+            <td class="text-green">₹<%= (Number(b.client_amount) || 0).toFixed(2) %></td>
+          </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+    <% } %>
+  </section>
+</section>

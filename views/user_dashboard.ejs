@@ -7,201 +7,240 @@
   </header>
 
   <div class="search-layout">
-    <div class="search-map-wrapper">
-      <div class="search-map-header">
-        <span>Map preview</span>
-        <span class="search-map-status">Based on your current location</span>
+    <!-- LEFT: map + search + results -->
+    <div class="search-main-column">
+      <div class="search-map-wrapper">
+        <div class="search-map-header">
+          <span>Map preview</span>
+          <span class="search-map-status">Based on your current location</span>
+        </div>
+        <div id="search-map" class="search-map-placeholder">
+          <p>Enable location to preview nearby parking on the map.</p>
+        </div>
       </div>
-      <div id="search-map" class="search-map-placeholder">
-        <p>Enable location to preview nearby parking on the map.</p>
-      </div>
-    </div>
 
-    <form action="/user/search" method="get" class="search-bar" id="parking-search-form">
-      <input type="hidden" name="user_lat" id="user_lat" value="<%= query.user_lat || '' %>" />
-      <input type="hidden" name="user_lng" id="user_lng" value="<%= query.user_lng || '' %>" />
-      <input type="hidden" name="sort" id="sort" value="<%= query.sort || 'distance' %>" />
-      <div class="search-bar-main">
-        <div class="search-input-group">
-          <label for="location">Location</label>
-          <div class="search-input-with-icon">
-            <input
-              id="location"
-              name="location"
-              type="text"
-              placeholder="Enter area, landmark, or address"
-              value="<%= query.location || '' %>"
-            />
-            <button
-              type="button"
-              class="use-location-btn"
-              title="Use my current location"
-              aria-label="Use my current location"
-            >
-              📍
-            </button>
+      <form action="/user/search" method="get" class="search-bar" id="parking-search-form">
+        <input type="hidden" name="user_lat" id="user_lat" value="<%= query.user_lat || '' %>" />
+        <input type="hidden" name="user_lng" id="user_lng" value="<%= query.user_lng || '' %>" />
+        <input type="hidden" name="sort" id="sort" value="<%= query.sort || 'distance' %>" />
+        <div class="search-bar-main">
+          <div class="search-input-group">
+            <label for="location">Location</label>
+            <div class="search-input-with-icon">
+              <input
+                id="location"
+                name="location"
+                type="text"
+                placeholder="Enter area, landmark, or address"
+                value="<%= query.location || '' %>"
+              />
+              <button
+                type="button"
+                class="use-location-btn"
+                title="Use my current location"
+                aria-label="Use my current location"
+              >
+                📍
+              </button>
+            </div>
+          </div>
+
+          <div class="search-input-group">
+            <label for="vehicle_type">Vehicle</label>
+            <select id="vehicle_type" name="vehicle_type">
+              <option value="">Any</option>
+              <option value="two-wheeler" <%= query.vehicle_type === 'two-wheeler' ? 'selected' : '' %>>
+                Two wheeler
+              </option>
+              <option value="four-wheeler" <%= query.vehicle_type === 'four-wheeler' ? 'selected' : '' %>>
+                Four wheeler
+              </option>
+              <option value="both" <%= query.vehicle_type === 'both' ? 'selected' : '' %>>
+                Both
+              </option>
+            </select>
+          </div>
+
+          <div class="search-input-group search-time-group">
+            <label for="time">Time</label>
+            <div class="search-time-fields">
+              <input id="from_time" type="time" />
+              <span class="time-separator">–</span>
+              <input id="to_time" type="time" />
+            </div>
           </div>
         </div>
 
-        <div class="search-input-group">
-          <label for="vehicle_type">Vehicle</label>
-          <select id="vehicle_type" name="vehicle_type">
-            <option value="">Any</option>
-            <option value="two-wheeler" <%= query.vehicle_type === 'two-wheeler' ? 'selected' : '' %>>
-              Two wheeler
-            </option>
-            <option value="four-wheeler" <%= query.vehicle_type === 'four-wheeler' ? 'selected' : '' %>>
-              Four wheeler
-            </option>
-            <option value="both" <%= query.vehicle_type === 'both' ? 'selected' : '' %>>
-              Both
-            </option>
-          </select>
-        </div>
+        <button type="submit" class="btn primary search-submit">
+          <span class="search-submit-label">Search</span>
+          <span class="search-submit-loading">Locating…</span>
+        </button>
+      </form>
 
-        <div class="search-input-group search-time-group">
-          <label for="time">Time</label>
-          <div class="search-time-fields">
-            <input id="from_time" type="time" />
-            <span class="time-separator">–</span>
-            <input id="to_time" type="time" />
-          </div>
-        </div>
-      </div>
-
-      <button type="submit" class="btn primary search-submit">
-        <span class="search-submit-label">Search</span>
-        <span class="search-submit-loading">Locating…</span>
-      </button>
-    </form>
-  </div>
-
-  <section class="results-section">
-    <header class="results-header">
-      <div>
-        <h2>Parking near you</h2>
-        <p class="results-subtitle">
-          <% if (hasUserLocation && nearbyCount === 0 && spaces && spaces.length > 0) { %>
-          No nearby parking found within 10 km. Showing all Chennai locations.
-          <% } else { %>
-          Showing spaces based on your search. Enable location to see what&apos;s closest.
-          <% } %>
-        </p>
-      </div>
-      <div class="results-meta">
-        <% if (spaces && spaces.length > 0) { %>
-        <span><%= spaces.length %> spaces available</span>
-        <% } %>
-        <div class="results-sort">
-          <span class="results-sort-label">Sort by:</span>
-          <button
-            type="button"
-            class="sort-pill <%= (query.sort || 'distance') === 'distance' ? 'active' : '' %>"
-            data-sort="distance"
-          >
-            Distance
-          </button>
-          <button
-            type="button"
-            class="sort-pill <%= query.sort === 'price' ? 'active' : '' %>"
-            data-sort="price"
-          >
-            Price
-          </button>
-          <button
-            type="button"
-            class="sort-pill <%= query.sort === 'availability' ? 'active' : '' %>"
-            data-sort="availability"
-          >
-            Availability
-          </button>
-        </div>
-      </div>
-    </header>
-
-    <% if (!spaces || spaces.length === 0) { %>
-    <p class="muted">No parking spaces found. Try changing your search or check again later.</p>
-    <% } else { %>
-    <div class="parking-grid">
-      <% spaces.forEach(space => { %>
-      <article
-        class="parking-card"
-        data-title="<%- space.title %>"
-        data-address="<%- space.address %>"
-        data-location="<%- space.location_description %>"
-        data-vehicle="<%- space.vehicle_type %>"
-        data-slots="<%- (space.available_slots || space.total_slots) %>"
-        data-available="<%- space.available_from %> to <%- space.available_to %>"
-        data-price="₹<%- space.price_per_hour %> / hour"
-        data-owner="<%- space.owner_name %>"
-        data-distance="<%- typeof space.distance_km === 'number' ? space.distance_km.toFixed(1) : '' %>"
-      >
-        <header class="parking-card-header">
+      <section class="results-section">
+        <header class="results-header">
           <div>
-            <h3 class="parking-name"><%= space.title %></h3>
-            <p class="parking-address"><%= space.address %></p>
+            <h2>Parking near you</h2>
+            <p class="results-subtitle">
+              <% if (hasUserLocation && nearbyCount === 0 && spaces && spaces.length > 0) { %>
+              No nearby parking found within 10 km. Showing all Chennai locations.
+              <% } else { %>
+              Showing spaces based on your search. Enable location to see what&apos;s closest.
+              <% } %>
+            </p>
           </div>
-          <div class="parking-badges">
-            <% if (space.is_verified) { %>
-            <span class="badge badge-verified">Verified owner</span>
+          <div class="results-meta">
+            <% if (spaces && spaces.length > 0) { %>
+            <span><%= spaces.length %> spaces available</span>
             <% } %>
-            <span class="badge badge-rating">⭐ <%= space.rating || '4.0' %></span>
+            <div class="results-sort">
+              <span class="results-sort-label">Sort by:</span>
+              <button
+                type="button"
+                class="sort-pill <%= (query.sort || 'distance') === 'distance' ? 'active' : '' %>"
+                data-sort="distance"
+              >
+                Distance
+              </button>
+              <button
+                type="button"
+                class="sort-pill <%= query.sort === 'price' ? 'active' : '' %>"
+                data-sort="price"
+              >
+                Price
+              </button>
+              <button
+                type="button"
+                class="sort-pill <%= query.sort === 'availability' ? 'active' : '' %>"
+                data-sort="availability"
+              >
+                Availability
+              </button>
+            </div>
           </div>
         </header>
 
-        <dl class="parking-meta">
-          <div class="meta-item">
-            <dt>Vehicle</dt>
-            <dd>
-              <span class="vehicle-icon">🚗</span>
-              <span><%= space.vehicle_type %></span>
-            </dd>
-          </div>
-          <div class="meta-item">
-            <dt>Slots</dt>
-            <dd>
-              <span><%= space.available_slots || space.total_slots %> available</span>
-              <% if ((space.available_slots || space.total_slots) === 1) { %>
-              <span class="badge badge-low">Only 1 slot left</span>
-              <% } %>
-            </dd>
-          </div>
-          <div class="meta-item">
-            <dt>Time</dt>
-            <dd><%= space.available_from %> – <%= space.available_to %></dd>
-          </div>
-          <div class="meta-item">
-            <dt>Price</dt>
-            <dd>₹<%= space.price_per_hour %> / hour</dd>
-          </div>
-          <div class="meta-item">
-            <dt>Distance</dt>
-            <dd class="distance-label">
-              <% if (typeof space.distance_km === 'number') { %>
-              <%= space.distance_km.toFixed(1) %> km away
-              <% } else { %>
-              —
-              <% } %>
-            </dd>
-          </div>
-        </dl>
+        <% if (!spaces || spaces.length === 0) { %>
+        <p class="muted">No parking spaces found. Try changing your search or check again later.</p>
+        <% } else { %>
+        <div class="parking-grid">
+          <% spaces.forEach(space => { %>
+          <article
+            class="parking-card"
+            data-title="<%- space.title %>"
+            data-address="<%- space.address %>"
+            data-location="<%- space.location_description || space.location || '' %>"
+            data-vehicle="<%- space.vehicle_type %>"
+            data-slots="<%- (space.available_slots || space.total_slots) %>"
+            data-available="<%- space.available_from %> to <%- space.available_to %>"
+            data-price="₹<%- space.price_per_hour %> / hour"
+            data-owner="<%- space.owner_name %>"
+            data-distance="<%- typeof space.distance_km === 'number' ? space.distance_km.toFixed(1) : '' %>"
+          >
+            <header class="parking-card-header">
+              <div>
+                <h3 class="parking-name"><%= space.title %></h3>
+                <p class="parking-address"><%= space.address %></p>
+              </div>
+              <div class="parking-badges">
+                <% if (space.is_verified) { %>
+                <span class="badge badge-verified">Verified owner</span>
+                <% } %>
+                <span class="badge badge-rating">⭐ <%= space.rating || '4.0' %></span>
+              </div>
+            </header>
 
-        <footer class="parking-card-footer">
-          <a href="/user/book/<%= space.id %>" class="btn primary btn-compact">Book Now</a>
-          <button type="button" class="btn ghost btn-compact more-details-btn">Details</button>
-        </footer>
-      </article>
-      <% }) %>
+            <dl class="parking-meta">
+              <div class="meta-item">
+                <dt>Vehicle</dt>
+                <dd>
+                  <span class="vehicle-icon">🚗</span>
+                  <span><%= space.vehicle_type %></span>
+                </dd>
+              </div>
+              <div class="meta-item">
+                <dt>Slots</dt>
+                <dd>
+                  <span><%= space.available_slots || space.total_slots %> available</span>
+                  <% if ((space.available_slots || space.total_slots) === 1) { %>
+                  <span class="badge badge-low">Only 1 slot left</span>
+                  <% } %>
+                </dd>
+              </div>
+              <div class="meta-item">
+                <dt>Time</dt>
+                <dd><%= space.available_from %> – <%= space.available_to %></dd>
+              </div>
+              <div class="meta-item">
+                <dt>Price</dt>
+                <dd>₹<%= space.price_per_hour %> / hour</dd>
+              </div>
+              <div class="meta-item">
+                <dt>Distance</dt>
+                <dd class="distance-label">
+                  <% if (typeof space.distance_km === 'number') { %>
+                  <%= space.distance_km.toFixed(1) %> km away
+                  <% } else { %>
+                  —
+                  <% } %>
+                </dd>
+              </div>
+            </dl>
+
+            <footer class="parking-card-footer">
+              <a href="/user/book/<%= space.id %>" class="btn primary btn-compact">Book Now</a>
+              <button type="button" class="btn ghost btn-compact more-details-btn">Details</button>
+            </footer>
+          </article>
+          <% }) %>
+        </div>
+
+        <div class="results-pagination">
+          <button type="button" class="btn ghost btn-compact">Load more</button>
+        </div>
+        <% } %>
+      </section>
+
+      <button class="sticky-filter-btn" type="button">
+        Filters
+      </button>
     </div>
 
-    <div class="results-pagination">
-      <button type="button" class="btn ghost btn-compact">Load more</button>
-    </div>
-    <% } %>
-  </section>
+    <!-- RIGHT: chatbot assistant -->
+    <aside class="chatbot-panel" id="chatbot-panel">
+      <header class="chatbot-header">
+        <div class="chatbot-title">
+          <span class="chatbot-avatar">🤖</span>
+          <div>
+            <h3>SmartPark Assistant</h3>
+            <p>Ask me to book a slot</p>
+          </div>
+        </div>
+      </header>
 
-  <button class="sticky-filter-btn" type="button">
-    Filters
+      <div class="chatbot-messages" id="chatbot-messages">
+        <div class="chatbot-bubble bot">
+          Hi! I can help you find and book a parking slot. Type
+          <strong>“Book a slot”</strong> to begin.
+        </div>
+      </div>
+
+      <div class="chatbot-quick-replies" id="chatbot-quick-replies"></div>
+
+      <form class="chatbot-input-row" id="chatbot-form">
+        <input
+          type="text"
+          id="chatbot-input"
+          placeholder="Ask me to book a slot, or a question..."
+          autocomplete="off"
+        />
+        <button type="submit" class="btn primary btn-chat-send">Send</button>
+      </form>
+    </aside>
+  </div>
+
+  <button class="chatbot-fab" id="chatbot-fab" type="button" aria-label="Open assistant">
+    🤖
   </button>
 </section>
 
