@@ -1,11 +1,17 @@
-const mysql = require('mysql2/promise');
 
-const connection = mysql.createConnection({
-  host: "hopper.proxy.rlwy.net",
-  port: 3306,
-  user: "root",
-  password: "VIvtylTibLVnJHlSUfaqjByYLWVLsyki",
-  database: "railway"
+
+const mysql = require('mysql2/promise');
+require('dotenv').config();
+
+const pool = mysql.createPool({
+  host: process.env.MYSQLHOST,
+  user: process.env.MYSQLUSER,
+  password: process.env.MYSQLPASSWORD,
+  database: process.env.MYSQLDATABASE,
+  port: process.env.MYSQLPORT,
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
 });
 
 // Ensure schema: password, commission columns, client earnings
