@@ -1,13 +1,11 @@
 const mysql = require('mysql2/promise');
 
-const pool = mysql.createPool({
-  host: process.env.DB_HOST || 'localhost',
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || '3369',
-  database: process.env.DB_NAME || 'smartparkitech',
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0,
+const connection = mysql.createConnection({
+  host: "hopper.proxy.rlwy.net",
+  port: 3306,
+  user: "root",
+  password: "VIvtylTibLVnJHlSUfaqjByYLWVLsyki",
+  database: "railway"
 });
 
 // Ensure schema: password, commission columns, client earnings
